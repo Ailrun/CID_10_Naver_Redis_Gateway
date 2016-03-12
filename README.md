@@ -9,6 +9,6 @@ Gateway for Redis using erasure coding
 * [Intel Storage Acceleration Library(ISA-L)](https://github.com/01org/isa-l)
 
 ## Author
-Junyoung Clare Jang (Ailrun)
-Hwan Lee
-Hyochang Yang
+* Junyoung Clare Jang (Ailrun)
+* Hwan Lee
+* Hyochang Yang
