@@ -1,0 +1,10 @@
+original_src/*
+!*.c
+!*.h
+!*.sh
+!*.rb
+!Makefile
+!Makefile.dep
+!*.sup
+*.o
+*~
