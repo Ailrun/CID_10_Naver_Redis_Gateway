@@ -1,12 +1,16 @@
 /*
  * Standard Headers
  */
+#include <sys/time.h>
+#include <sys/stat.h>
+#include <signal.h>
 #include <unistd.h>
 
 /*
  * Redis Headers
  */
 #include "ae.h"
+#include "anet.h"
 
 /*
  * New Headers
@@ -48,12 +52,15 @@ int listenToPort(int port, int *fds, int *count) {
              * server.bindaddr_count == 0. */
             fds[*count] = anetTcp6Server(gateway.neterr,port,NULL,
                 gateway.tcp_backlog);
+
             if (fds[*count] != ANET_ERR) {
                 anetNonBlock(NULL,fds[*count]);
                 (*count)++;
             }
+
             fds[*count] = anetTcpServer(gateway.neterr,port,NULL,
                 gateway.tcp_backlog);
+
             if (fds[*count] != ANET_ERR) {
                 anetNonBlock(NULL,fds[*count]);
                 (*count)++;
@@ -71,17 +78,16 @@ int listenToPort(int port, int *fds, int *count) {
             fds[*count] = anetTcpServer(gateway.neterr,port,gateway.bindaddr[j],
                 gateway.tcp_backlog);
         }
+
         if (fds[*count] == ANET_ERR) {
-            redisLog(REDIS_WARNING,
-                "Creating Server TCP listening socket %s:%d: %s",
-                gateway.bindaddr[j] ? gateway.bindaddr[j] : "*",
-                port, server.neterr);
-            return REDIS_ERR;
+	    printf("Creating Server TCP listening socket %s:%d: %s",
+		   gateway.bindaddr[j] ? gateway.bindaddr[j] : "*", port, gateway.neterr);
+	    return -1;
         }
         anetNonBlock(NULL,fds[*count]);
         (*count)++;
     }
-    return REDIS_OK;
+    return 0;
 }
 
 void initGateway(void)
@@ -91,13 +97,27 @@ void initGateway(void)
     printf("start:: initGateway\n");
 #endif /* #if DEBUG > 3 */
 
-    signal(SIGHUP, SIGIGN);
-    signal(SIGPIPE, SIGIGN);
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
 
     gateway.pid = getpid();
 
-    gateway.el = aeCreateEventLoop(gateway.max_client);
+    gateway.el = *aeCreateEventLoop(gateway.max_client);
 
+    if (gateway.port != 0 &&
+	listenToPort(gateway.port, gateway.ipfd, &gateway.ipfd_count) == -1)
+    {
+	exit(1);
+    }
+
+    for (int j = 0; j < gateway.ipfd_count; j++)
+    {
+	if (aeCreateFileEvent(gateway.el, gateway.ipfd[j], AE_READABLE, acceptTcpHandler, NULL) == AE_ERR)
+	{
+	    printf("ERROR!\n");
+	}
+    }
+    
 #if DEBUG > 3
     printf("end:: initGateway\n");
 #endif /* #if DEBUG > 3 */
@@ -113,6 +133,8 @@ int main(void)
 
     initGatewayConfig();
     initGateway();
+
+    aeMain(gateway.el);
 
 #if DEBUG > 3
     printf("end:: main\n");
