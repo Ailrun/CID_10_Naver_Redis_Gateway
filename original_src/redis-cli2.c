@@ -77,6 +77,11 @@ int spectrum_palette_size;
 
 static redisContext *context;
 static redisContext *context2;
+static redisContext *context3;
+static redisContext *context4;
+static redisContext *context5;
+static redisContext *context6;
+
 static struct config {
     char *hostip;
     int hostport;
@@ -113,7 +118,7 @@ static struct config {
     char prompt[128];
     char *eval;
     int last_cmd_type;
-} config, config2;
+} config, config2, config3, config4, config5, config6;
 
 static volatile sig_atomic_t force_cancel_loop = 0;
 static void usage(void);
@@ -149,9 +154,21 @@ static void cliRefreshPrompt(int sn) {
 	case 2:
 	cf = &config2;
 	break;
+	case 3:
+	cf = &config3;
+	break;
+	case 4:
+	cf = &config4;
+	break;
+	case 5:
+	cf = &config5;
+	break;
+	case 6:
+	cf = &config6;
+	break;
 }
-    fprintf(stdout,"test-%s:%d\n",cf->hostip,cf->hostport);
-    fprintf(stdout,"prompt check-%s\n",cf->prompt);
+//    fprintf(stdout,"test for - %s:%d\n",cf->hostip,cf->hostport);
+//    fprintf(stdout,"prompt check-%s\n",cf->prompt);
     if (cf->hostsocket != NULL)
         len = snprintf(cf->prompt,sizeof(cf->prompt),"redis %s",
                        cf->hostsocket);
@@ -164,7 +181,7 @@ static void cliRefreshPrompt(int sn) {
         len += snprintf(cf->prompt+len,sizeof(cf->prompt)-len,"[%d]",
             cf->dbnum);
     snprintf(cf->prompt+len,sizeof(cf->prompt)-len,"> ");
-    fprintf(stdout,"prompt after cliRefreshPrompt-%s\n",cf->prompt);
+//    fprintf(stdout,"prompt after cliRefreshPrompt-%s\n",cf->prompt);
 }
 
 static sds getHistoryPath() {
@@ -394,7 +411,19 @@ static int cliConnect(redisContext *c, int force, int sn) {
 	   break;
 	case 2:
 	   cf = &config2;
-           break;
+		break;
+	case 3:
+	   cf = &config3;
+		break;
+	case 4:
+	   cf = &config4;
+	break;
+	case 5:
+	   cf = &config5;
+	break;
+	case 6:
+	   cf = &config6;
+	break;
 	}
         if (c != NULL)
             redisFree(c);
@@ -402,7 +431,7 @@ static int cliConnect(redisContext *c, int force, int sn) {
         if (cf->hostsocket == NULL) {
             c = redisConnect(cf->hostip,cf->hostport);
 	    fprintf(stdout,"Connecting to ");
-	    fprintf(stdout,"%s:%d\n",cf->hostip,cf->hostport);
+	    fprintf(stdout,"%s:%d...\n",cf->hostip,cf->hostport);
         } else {
             c = redisConnectUnix(cf->hostsocket);
 	    fprintf(stdout,"Connecting to ");
@@ -415,7 +444,7 @@ static int cliConnect(redisContext *c, int force, int sn) {
                 fprintf(stderr,"%s:%d: %s\n",cf->hostip,cf->hostport,c->errstr);
             else
                 fprintf(stderr,"%s: %s\n",cf->hostsocket,c->errstr);
-            redisFree(c);
+            //redisFree(c);
             c = NULL;
 	    //free(cf);
             return REDIS_ERR;
@@ -432,7 +461,20 @@ static int cliConnect(redisContext *c, int force, int sn) {
 	break;
 	case 2:
 	context2 = c;
-	break;}
+	break;
+	case 3:
+	context3 = c;
+	break;
+	case 4:
+	context4 = c;
+	break;
+	case 5:
+	context5 = c;
+	break;
+	case 6:
+	context6 = c;
+	break;
+	}
         //free(cf);
         /* Do AUTH and select the right DB. */
         if (cliAuth() != REDIS_OK)
@@ -443,9 +485,34 @@ static int cliConnect(redisContext *c, int force, int sn) {
     return REDIS_OK;
 }
 
-static void cliPrintContextError(void) {
-    if (context == NULL) return;
-    fprintf(stderr,"Error: %s\n",context->errstr);
+static void cliPrintContextError(struct redisContext *c, int sn) {
+        switch(sn){
+        case 1:
+        context = c;
+        break;
+        case 2:
+        context2 = c;
+        break;
+        case 3:
+        context3 = c;
+        break;
+        case 4:
+        context4 = c;
+        break;
+        case 5:
+        context5 = c;
+        break;
+        case 6:
+        context6 = c;
+        break;
+        }
+
+
+    //printf("context in cliPrintContextError: %d\n",(int)c);
+    if (c == NULL) return;
+    //printf("c is not null! ");
+    //fprintf(stderr,"Error: %s\n",c->errstr);
+    //free(c);
 }
 
 static sds cliFormatReplyTTY(redisReply *r, char *prefix) {
@@ -596,13 +663,29 @@ static int cliReadReply(int output_raw_strings,int sn) {
 
     switch(sn){
 	case 1:
-           cf = &config;
-	   c = context;
-	   break;
+		cf = &config;
+		c = context;
+	break;
         case 2:
-           cf = &config2;
-	   c = context2;
- 	   break;
+		cf = &config2;
+		c = context2;
+	break;
+	case 3:
+		cf = &config3;
+		c = context3;
+	break;
+	case 4:
+		cf = &config4;
+		c = context4;
+	break;
+	case 5:
+		cf = &config5;
+		c = context5;
+	break;
+	case 6:
+		cf = &config6;
+		c = context6;
+	break;
         }
 
 
@@ -620,8 +703,8 @@ static int cliReadReply(int output_raw_strings,int sn) {
             if (c->err == REDIS_ERR_EOF)
                 return REDIS_ERR;
         }
-        cliPrintContextError();
-        exit(1);
+        cliPrintContextError(c, sn);
+        //exit(1);
         return REDIS_ERR; /* avoid compiler warning */
     }
 
@@ -698,6 +781,22 @@ static int cliSendCommand(int argc, char **argv, int repeat, int sn) {
            cf = &config2;
  	   c = context2;
 	   break;
+	case 3:
+	   cf = &config3;
+	   c = context3;
+	break;
+	case 4:
+	   cf = &config4;
+	   c = context4;
+	break;
+	case 5:
+	   cf = &config5;
+	   c = context5;
+	break;
+	case 6:
+	   cf = &config6;
+	   c = context6;
+	break;
         }
 
 
@@ -706,6 +805,7 @@ static int cliSendCommand(int argc, char **argv, int repeat, int sn) {
         return REDIS_OK;
     }
 
+//	printf("context in cliSendCommand:%d\n",(int) c);
     if (c == NULL) return REDIS_ERR;
 
     output_raw = 0;
@@ -760,7 +860,10 @@ static int cliSendCommand(int argc, char **argv, int repeat, int sn) {
         }
 
         if (cliReadReply(output_raw, sn) != REDIS_OK) {
+	    //printf("Error occured\n");
             free(argvlen);
+	    //printf("Redis context when error occured:%d\n",(int)c);
+	    //redisFree(c);
             //free(cf);
             return REDIS_ERR;
         } else {
@@ -1015,18 +1118,37 @@ static int issueCommandRepeat(int argc, char **argv, long repeat, int sn) {
            cf = &config2;
 	   c = context2;
 	   break;
+        case 3:
+     	   cf = &config3;
+	   c = context3;
+	break;
+	case 4:
+	   cf = &config4;
+	   c = context4;
+	break;
+	case 5:
+	   cf = &config5;
+	   c = context5;
+	break;
+	case 6:
+	   cf = &config6;
+	   c = context6;
+	break;
         }
 
 
     while (1) {
         cf->cluster_reissue_command = 0;
         if (cliSendCommand(argc,argv,repeat, sn) != REDIS_OK) {
+	    //if(c != NULL){
+	    //redisFree(c);
+	    //}
             cliConnect(c, 1, sn);
 
             /* If we still cannot send the command print error.
              * We'll try to reconnect the next time. */
             if (cliSendCommand(argc,argv,repeat, sn) != REDIS_OK) {
-                cliPrintContextError();
+                cliPrintContextError(c, sn);
 		//free(cf);
                 return REDIS_ERR;
             }
@@ -1054,19 +1176,43 @@ static void repl(int sn) {
     sds *argv;
     struct config *cf = malloc(sizeof(struct config));
 	struct config *cf2 = malloc(sizeof(struct config));
+	struct config *cf3 = malloc(sizeof(struct config));
+	struct config *cf4 = malloc(sizeof(struct config));
+	struct config *cf5 = malloc(sizeof(struct config));
+	struct config *cf6 = malloc(sizeof(struct config));
     struct redisContext *c = malloc(sizeof(struct redisContext));
 	struct redisContext *c2 = malloc(sizeof(struct redisContext));
+	struct redisContext *c3 = malloc(sizeof(struct redisContext));
+	struct redisContext *c4 = malloc(sizeof(struct redisContext));
+	struct redisContext *c5 = malloc(sizeof(struct redisContext));
+	struct redisContext *c6 = malloc(sizeof(struct redisContext));
+	
     switch(sn){
         case 1:
            cf = &config;
-		   cf2 = &config2;
+	   cf2 = &config2;
+	   cf3 = &config3;
+	   cf4 = &config4;
+	   cf5 = &config5;
+	   cf6 = &config6;
 	   c = context;
 	   c2 = context2;
+	   c3 = context3;
+	   c4 = context4;
+	   c5 = context5;
+	   c6 = context6;
 	   break;
-        case 2:
+       case 2:
            cf = &config2;
 	   c = context2;
 	   break;
+	case 3:
+	   cf = &config3;
+           c = context3;
+	case 4:
+		cf = &config4;
+		c = context4;
+	break;
         }
 
     cf->interactive = 1;
@@ -1082,12 +1228,28 @@ static void repl(int sn) {
         }
     }
 
-    cliRefreshPrompt(sn);
-    fprintf(stdout,"context null?-%d\n",c);
-    fprintf(stdout,"context2 null?-%d\n",c2);
-    fprintf(stdout,"once again, prompt check-%s\n",cf->prompt);
-	fprintf(stdout,"and prompt2 check-%s\n",cf2->prompt);
-    while((line = linenoise(c ? cf->prompt : "not connected> ")) != NULL) {
+    cliRefreshPrompt(1);
+    cliRefreshPrompt(2);
+    cliRefreshPrompt(3);
+    cliRefreshPrompt(4);
+    cliRefreshPrompt(5);
+    cliRefreshPrompt(6);
+//    fprintf(stdout,"context null?-%d\n",c);
+//    fprintf(stdout,"context2 null?-%d\n",c2);
+//    fprintf(stdout,"context3 null?-%d\n",c3);
+//    fprintf(stdout,"context4 null?-%d\n",c4);
+//    fprintf(stdout,"context5 null?-%d\n",c5);
+//    fprintf(stdout,"context6 null?-%d\n",c6);
+
+  //  fprintf(stdout,"prompt check-%s\n",cf->prompt);
+//	fprintf(stdout,"+prompt2 check-%s\n",cf2->prompt);
+//	fprintf(stdout,"+prompt3 check-%s\n",cf3->prompt);
+//	fprintf(stdout,"+prompt4 check-%s\n",cf4->prompt);
+//	fprintf(stdout,"+prompt5 check-%s\n",cf5->prompt);
+//	fprintf(stdout,"+prompt6 check-%s\n",cf6->prompt);
+
+	
+    while((line = linenoise(c ? "connected> " : "not connected> ")) != NULL) {
         if (line[0] != '\0') {
             argv = sdssplitargs(line,&argc);
             if (history) linenoiseHistoryAdd(line);
@@ -1122,8 +1284,11 @@ static void repl(int sn) {
                     }
 
                     issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, sn);
-					issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 2);
-
+		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 2);
+		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 3);
+		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 4);
+		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 5);
+		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 6);
                     elapsed = mstime()-start_time;
                     if (elapsed >= 500) {
                         printf("(%.2fs)\n",(double)elapsed/1000);
@@ -2314,7 +2479,7 @@ int main(int argc, char **argv) {
     config.stdinarg = 0;
     config.auth = NULL;
     config.eval = NULL;
-    config.last_cmd_type = -1;
+    config.last_cmd_type = -1;	
 
     config2.hostip = sdsnew("127.0.0.1");
     config2.hostport = 6381;
@@ -2345,7 +2510,131 @@ int main(int argc, char **argv) {
     config2.stdinarg = 0;
     config2.auth = NULL;
     config2.eval = NULL;
-    config2.last_cmd_type = -1;
+    config2.last_cmd_type = -1;	
+
+    config3.hostip = sdsnew("127.0.0.1");
+    config3.hostport = 6382;
+    config3.hostsocket = NULL;
+    config3.repeat = 1;
+    config3.interval = 0;
+    config3.dbnum = 0;
+    config3.interactive = 0;
+    config3.shutdown = 0;
+    config3.monitor_mode = 0;
+    config3.pubsub_mode = 0;
+    config3.latency_mode = 0;
+    config3.latency_dist_mode = 0;
+    config3.latency_history = 0;
+    config3.lru_test_mode = 0;
+    config3.lru_test_sample_size = 0;
+    config3.cluster_mode = 0;
+    config3.slave_mode = 0;
+    config3.getrdb_mode = 0;
+    config3.stat_mode = 0;
+    config3.scan_mode = 0;
+    config3.intrinsic_latency_mode = 0;
+    config3.pattern = NULL;
+    config3.rdb_filename = NULL;
+    config3.pipe_mode = 0;
+    config3.pipe_timeout = REDIS_CLI_DEFAULT_PIPE_TIMEOUT;
+    config3.bigkeys = 0;
+    config3.stdinarg = 0;
+    config3.auth = NULL;
+    config3.eval = NULL;
+    config3.last_cmd_type = -1;	
+	
+    config4.hostip = sdsnew("127.0.0.1");
+    config4.hostport = 6383;
+    config4.hostsocket = NULL;
+    config4.repeat = 1;
+    config4.interval = 0;
+    config4.dbnum = 0;
+    config4.interactive = 0;
+    config4.shutdown = 0;
+    config4.monitor_mode = 0;
+    config4.pubsub_mode = 0;
+    config4.latency_mode = 0;
+    config4.latency_dist_mode = 0;
+    config4.latency_history = 0;
+    config4.lru_test_mode = 0;
+    config4.lru_test_sample_size = 0;
+    config4.cluster_mode = 0;
+    config4.slave_mode = 0;
+    config4.getrdb_mode = 0;
+    config4.stat_mode = 0;
+    config4.scan_mode = 0;
+    config4.intrinsic_latency_mode = 0;
+    config4.pattern = NULL;
+    config4.rdb_filename = NULL;
+    config4.pipe_mode = 0;
+    config4.pipe_timeout = REDIS_CLI_DEFAULT_PIPE_TIMEOUT;
+    config4.bigkeys = 0;
+    config4.stdinarg = 0;
+    config4.auth = NULL;
+    config4.eval = NULL;
+    config4.last_cmd_type = -1;	
+
+    config5.hostip = sdsnew("127.0.0.1");
+    config5.hostport = 6384;
+    config5.hostsocket = NULL;
+    config5.repeat = 1;
+    config5.interval = 0;
+    config5.dbnum = 0;
+    config5.interactive = 0;
+    config5.shutdown = 0;
+    config5.monitor_mode = 0;
+    config5.pubsub_mode = 0;
+    config5.latency_mode = 0;
+    config5.latency_dist_mode = 0;
+    config5.latency_history = 0;
+    config5.lru_test_mode = 0;
+    config5.lru_test_sample_size = 0;
+    config5.cluster_mode = 0;
+    config5.slave_mode = 0;
+    config5.getrdb_mode = 0;
+    config5.stat_mode = 0;
+    config5.scan_mode = 0;
+    config5.intrinsic_latency_mode = 0;
+    config5.pattern = NULL;
+    config5.rdb_filename = NULL;
+    config5.pipe_mode = 0;
+    config5.pipe_timeout = REDIS_CLI_DEFAULT_PIPE_TIMEOUT;
+    config5.bigkeys = 0;
+    config5.stdinarg = 0;
+    config5.auth = NULL;
+    config5.eval = NULL;
+    config5.last_cmd_type = -1;
+
+    config6.hostip = sdsnew("127.0.0.1");
+    config6.hostport = 6385;
+    config6.hostsocket = NULL;
+    config6.repeat = 1;
+    config6.interval = 0;
+    config6.dbnum = 0;
+    config6.interactive = 0;
+    config6.shutdown = 0;
+    config6.monitor_mode = 0;
+    config6.pubsub_mode = 0;
+    config6.latency_mode = 0;
+    config6.latency_dist_mode = 0;
+    config6.latency_history = 0;
+    config6.lru_test_mode = 0;
+    config6.lru_test_sample_size = 0;
+    config6.cluster_mode = 0;
+    config6.slave_mode = 0;
+    config6.getrdb_mode = 0;
+    config6.stat_mode = 0;
+    config6.scan_mode = 0;
+    config6.intrinsic_latency_mode = 0;
+    config6.pattern = NULL;
+    config6.rdb_filename = NULL;
+    config6.pipe_mode = 0;
+    config6.pipe_timeout = REDIS_CLI_DEFAULT_PIPE_TIMEOUT;
+    config6.bigkeys = 0;
+    config6.stdinarg = 0;
+    config6.auth = NULL;
+    config6.eval = NULL;
+    config6.last_cmd_type = -1;
 
 
     spectrum_palette = spectrum_palette_color;
@@ -2428,11 +2717,15 @@ int main(int argc, char **argv) {
         /* Note that in repl mode we don't abort on connection error.
          * A new attempt will be performed for every command send. */
         cliConnect(context, 0,1);
-	cliConnect(context2,0,2);
+		cliConnect(context2,0,2);
+		cliConnect(context3,0,3);
+		cliConnect(context4,0,4);
+		cliConnect(context5,0,5);
+		cliConnect(context6,0,6);
         repl(1);
     }
     if (argc == 1){
-	printf("If argument is 1:\n");
+	printf("If argument is 1, open 6381 port only:\n");
 	signal(SIGPIPE, SIG_IGN);
 	cliConnect(context2,0,2);
 	repl(2);
