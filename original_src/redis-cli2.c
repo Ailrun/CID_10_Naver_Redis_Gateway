@@ -121,6 +121,7 @@ static struct config {
 } config, config2, config3, config4, config5, config6;
 
 static volatile sig_atomic_t force_cancel_loop = 0;
+static int deadServer = 0;
 static void usage(void);
 static void slaveMode(void);
 char *redisGitSHA1(void);
@@ -507,7 +508,7 @@ static void cliPrintContextError(struct redisContext *c, int sn) {
         break;
         }
 
-
+	deadServer++;
     //printf("context in cliPrintContextError: %d\n",(int)c);
     if (c == NULL) return;
     //printf("c is not null! ");
@@ -1251,6 +1252,7 @@ static void repl(int sn) {
 	
     while((line = linenoise(c ? "connected> " : "not connected> ")) != NULL) {
         if (line[0] != '\0') {
+	    deadServer = 0;
             argv = sdssplitargs(line,&argc);
             if (history) linenoiseHistoryAdd(line);
             if (historyfile) linenoiseHistorySave(historyfile);
@@ -1289,6 +1291,9 @@ static void repl(int sn) {
 		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 4);
 		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 5);
 		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, 6);
+		if(deadServer > 2){
+			printf("Warning: More than 2 servers not connected\n");
+		}
                     elapsed = mstime()-start_time;
                     if (elapsed >= 500) {
                         printf("(%.2fs)\n",(double)elapsed/1000);
