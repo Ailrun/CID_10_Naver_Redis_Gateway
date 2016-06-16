@@ -6,5 +6,6 @@ original_src/*
 !Makefile
 !Makefile.dep
 !*.sup
+original_src/release.h
 *.o
 *~
