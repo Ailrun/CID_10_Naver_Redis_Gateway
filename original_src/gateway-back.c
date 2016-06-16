@@ -1,32 +1,32 @@
 /* Redis CLI (command line interface)
- *
- * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *   * Redistributions of source code must retain the above copyright notice,
- *     this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above copyright
- *     notice, this list of conditions and the following disclaimer in the
- *     documentation and/or other materials provided with the distribution.
- *   * Neither the name of Redis nor the names of its contributors may be used
- *     to endorse or promote products derived from this software without
- *     specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+  *
+  * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
+  * All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions are met:
+  *
+  *   * Redistributions of source code must retain the above copyright notice,
+  *     this list of conditions and the following disclaimer.
+  *   * Redistributions in binary form must reproduce the above copyright
+  *     notice, this list of conditions and the following disclaimer in the
+  *     documentation and/or other materials provided with the distribution.
+  *   * Neither the name of Redis nor the names of its contributors may be used
+  *     to endorse or promote products derived from this software without
+  *     specific prior written permission.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  * POSSIBILITY OF SUCH DAMAGE.
+  */
 
 #include "fmacros.h"
 #include "version.h"
@@ -120,7 +120,7 @@ static struct config {
 static volatile sig_atomic_t force_cancel_loop = 0;
 static int deadServer = 0;
 static void usage(void);
-static void slaveMode(int sn);
+static void slaveMode(int sn, sds *result);
 char *redisGitSHA1(void);
 char *redisGitDirty(void);
 
@@ -562,7 +562,7 @@ static sds cliFormatReplyCSV(redisReply *r, int sn) {
     return out;
 }
 
-static int cliReadReply(int output_raw_strings, int sn) {
+static int cliReadReply(int output_raw_strings, int sn, sds *result) {
     void *_reply;
     redisReply *reply;
     sds out = NULL;
@@ -623,7 +623,7 @@ static int cliReadReply(int output_raw_strings, int sn) {
 
     if (output) {
         if (output_raw_strings) {
-            out = cliFormatReplyRaw(reply, sn);
+			out = cliFormatReplyRaw(reply, sn);
         } else {
             if (config[sn].output == OUTPUT_RAW) {
                 out = cliFormatReplyRaw(reply, sn);
@@ -635,14 +635,14 @@ static int cliReadReply(int output_raw_strings, int sn) {
                 out = sdscat(out,"\n");
             }
         }
-        fwrite(out,sdslen(out),1,stdout);
+		*result = sdscatsds(*result, out);
         sdsfree(out);
     }
     freeReplyObject(reply);
     return REDIS_OK;
 }
 
-static int cliSendCommand(int argc, char **argv, int repeat, int sn) {
+static int cliSendCommand(int argc, char **argv, int repeat, int sn, sds *result) {
     char *command = argv[0];
     size_t *argvlen;
     int j, output_raw;
@@ -685,7 +685,7 @@ static int cliSendCommand(int argc, char **argv, int repeat, int sn) {
     while(repeat--) {
         redisAppendCommandArgv(context[sn],argc,(const char**)argv,argvlen);
         while (config[sn].monitor_mode) {
-            if (cliReadReply(output_raw, sn) != REDIS_OK) exit(1);
+            if (cliReadReply(output_raw, sn, result) != REDIS_OK) exit(1);
             fflush(stdout);
         }
 
@@ -693,20 +693,20 @@ static int cliSendCommand(int argc, char **argv, int repeat, int sn) {
             if (config[sn].output != OUTPUT_RAW)
                 printf("Reading messages... (press Ctrl-C to quit)\n");
             while (1) {
-                if (cliReadReply(output_raw, sn) != REDIS_OK) exit(1);
+                if (cliReadReply(output_raw, sn, result) != REDIS_OK) exit(1);
             }
         }
 
         if (config[sn].slave_mode) {
             printf("Entering slave output mode...  (press Ctrl-C to quit)\n");
-            slaveMode(sn);
+            slaveMode(sn, result);
             config[sn].slave_mode = 0;
             free(argvlen);
 			//free(cf);
             return REDIS_ERR;  /* Error = slaveMode lost connection to master */
         }
 
-        if (cliReadReply(output_raw, sn) != REDIS_OK) {
+        if (cliReadReply(output_raw, sn, result) != REDIS_OK) {
 			//printf("Error occured\n");
             free(argvlen);
 			//printf("Redis context when error occured:%d\n",(int)c);
@@ -951,15 +951,15 @@ static char **convertToSds(int count, char** args) {
 	return sds;
 }
 
-static int issueCommandRepeat(int argc, char **argv, long repeat, int sn) {
+static int issueCommandRepeat(int argc, char **argv, long repeat, int sn, sds *result) {
     while (1) {
         config[sn].cluster_reissue_command = 0;
-        if (cliSendCommand(argc,argv,repeat,sn) != REDIS_OK) {
+        if (cliSendCommand(argc,argv,repeat,sn,result) != REDIS_OK) {
             cliConnect(1, sn);
 
             /* If we still cannot send the command print error.
              * We'll try to reconnect the next time. */
-            if (cliSendCommand(argc,argv,repeat,sn) != REDIS_OK) {
+            if (cliSendCommand(argc,argv,repeat,sn,result) != REDIS_OK) {
                 cliPrintContextError(sn);
                 return REDIS_ERR;
             }
@@ -974,195 +974,196 @@ static int issueCommandRepeat(int argc, char **argv, long repeat, int sn) {
     return REDIS_OK;
 }
 
-static int issueCommand(int argc, char **argv, int sn) {
-    return issueCommandRepeat(argc, argv, config[sn].repeat, sn);
+static int issueCommand(int argc, char **argv, int sn, sds *result) {
+    return issueCommandRepeat(argc, argv, config[sn].repeat, sn, result);
 }
 
-static void repl(int sn) {
-    sds historyfile = NULL;
-    int history = 0;
-    char *line;
-    int argc;
-    sds *argv;
+
+/* static void repl(int sn) { */
+/*     sds historyfile = NULL; */
+/*     int history = 0; */
+/*     char *line; */
+/*     int argc; */
+/*     sds *argv; */
 	
-    config[sn].interactive = 1;
-    linenoiseSetMultiLine(1);
-    linenoiseSetCompletionCallback(completionCallback);
+/*     config[sn].interactive = 1; */
+/*     linenoiseSetMultiLine(1); */
+/*     linenoiseSetCompletionCallback(completionCallback); */
 
-    /* Only use history when stdin is a tty. */
-    if (isatty(fileno(stdin))) {
-        historyfile = getHistoryPath();
-        if (historyfile != NULL) {
-            history = 1;
-            linenoiseHistoryLoad(historyfile);
-        }
-    }
+/*     /\* Only use history when stdin is a tty. *\/ */
+/*     if (isatty(fileno(stdin))) { */
+/*         historyfile = getHistoryPath(); */
+/*         if (historyfile != NULL) { */
+/*             history = 1; */
+/*             linenoiseHistoryLoad(historyfile); */
+/*         } */
+/*     } */
 
-	cliRefreshPrompt(sn);
-    while((line = linenoise(context[sn] ? "connected> " : "not connected> ")) != NULL) {
-        if (line[0] != '\0') {
-			deadServer = 0;
-            argv = sdssplitargs(line,&argc);
-            if (history) linenoiseHistoryAdd(line);
-            if (historyfile) linenoiseHistorySave(historyfile);
+/* 	cliRefreshPrompt(sn); */
+/*     while((line = linenoise(context[sn] ? "connected> " : "not connected> ")) != NULL) { */
+/*         if (line[0] != '\0') { */
+/* 			deadServer = 0; */
+/*             argv = sdssplitargs(line,&argc); */
+/*             if (history) linenoiseHistoryAdd(line); */
+/*             if (historyfile) linenoiseHistorySave(historyfile); */
 
-            if (argv == NULL) {
-                printf("Invalid argument(s)\n");
-                free(line);
-                continue;
-            } else if (argc > 0) {
-				//printf("strcmp():%d", strcasecmp(argv[0],"fget"));
-                if (strcasecmp(argv[0],"quit") == 0 ||
-                    strcasecmp(argv[0],"exit") == 0)
-                {
-                    exit(0);
-                } else if (argc == 3 && !strcasecmp(argv[0],"connect")) {
-                    sdsfree(config[sn].hostip);
-                    config[sn].hostip = sdsnew(argv[1]);
-                    config[sn].hostport = atoi(argv[2]);
-                    cliRefreshPrompt(sn);
-                    cliConnect(1, sn);
-                } else if (argc == 1 && !strcasecmp(argv[0],"clear")) {
-                    linenoiseClearScreen();
-				} else if (argc == 3 && !strcasecmp(argv[0],"fget")) {
-					argc--;
-					argv[0] = sdsnewlen("get",3); 
-					int repeat, skipargs = 0;
-					int nsn = 0;
-					nsn = atoi(argv[2]);
-					repeat = atoi(argv[0]);
-					if (argc > 1 && repeat) {
-						skipargs = 1;
-					} else { 
-						repeat = 1;
-					}
+/*             if (argv == NULL) { */
+/*                 printf("Invalid argument(s)\n"); */
+/*                 free(line); */
+/*                 continue; */
+/*             } else if (argc > 0) { */
+/* 				//printf("strcmp():%d", strcasecmp(argv[0],"fget")); */
+/*                 if (strcasecmp(argv[0],"quit") == 0 || */
+/*                     strcasecmp(argv[0],"exit") == 0) */
+/*                 { */
+/*                     exit(0); */
+/*                 } else if (argc == 3 && !strcasecmp(argv[0],"connect")) { */
+/*                     sdsfree(config[sn].hostip); */
+/*                     config[sn].hostip = sdsnew(argv[1]); */
+/*                     config[sn].hostport = atoi(argv[2]); */
+/*                     cliRefreshPrompt(sn); */
+/*                     cliConnect(1, sn); */
+/*                 } else if (argc == 1 && !strcasecmp(argv[0],"clear")) { */
+/*                     linenoiseClearScreen(); */
+/* 				} else if (argc == 3 && !strcasecmp(argv[0],"fget")) { */
+/* 					argc--; */
+/* 					argv[0] = sdsnewlen("get",3);  */
+/* 					int repeat, skipargs = 0; */
+/* 					int nsn = 0; */
+/* 					nsn = atoi(argv[2]); */
+/* 					repeat = atoi(argv[0]); */
+/* 					if (argc > 1 && repeat) { */
+/* 						skipargs = 1; */
+/* 					} else {  */
+/* 						repeat = 1; */
+/* 					} */
 		    
-					issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn);
+/* 					issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn); */
 
-					if(deadServer > 2){
-						printf("Warning:More than 2 servers not connected\n");
-					}
-                } else if (argc == 4 && !strcasecmp(argv[0],"fset")) {
-                    argc--;
-                    argv[0] = sdsnewlen("set",3);
-                    int repeat, skipargs = 0;
-                    int nsn = 0;
-                    nsn = atoi(argv[3]);
-                    repeat = atoi(argv[0]);
-                    if (argc > 1 && repeat) {
-                    	skipargs = 1;
-                    } else {
-                    	repeat = 1;
-                    }
+/* 					if(deadServer > 2){ */
+/* 						printf("Warning:More than 2 servers not connected\n"); */
+/* 					} */
+/*                 } else if (argc == 4 && !strcasecmp(argv[0],"fset")) { */
+/*                     argc--; */
+/*                     argv[0] = sdsnewlen("set",3); */
+/*                     int repeat, skipargs = 0; */
+/*                     int nsn = 0; */
+/*                     nsn = atoi(argv[3]); */
+/*                     repeat = atoi(argv[0]); */
+/*                     if (argc > 1 && repeat) { */
+/*                     	skipargs = 1; */
+/*                     } else { */
+/*                     	repeat = 1; */
+/*                     } */
                     
-					issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn);
+/* 					issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn); */
 
-					if(deadServer > 2){
-						printf("Warning:More than 2 servers not connected\n");
-                    }
-                } else if (argc == 3 && !strcasecmp(argv[0],"fdel")) {
-                    argc--;
-                    argv[0] = sdsnewlen("del",3);
-                    int repeat, skipargs = 0;
-                    int nsn = 0;
-                    nsn = atoi(argv[2]);
-                    repeat = atoi(argv[0]);
-                    if (argc > 1 && repeat) {
-                        skipargs = 1;
-                    } else {
-                        repeat = 1;
-                    }
+/* 					if(deadServer > 2){ */
+/* 						printf("Warning:More than 2 servers not connected\n"); */
+/*                     } */
+/*                 } else if (argc == 3 && !strcasecmp(argv[0],"fdel")) { */
+/*                     argc--; */
+/*                     argv[0] = sdsnewlen("del",3); */
+/*                     int repeat, skipargs = 0; */
+/*                     int nsn = 0; */
+/*                     nsn = atoi(argv[2]); */
+/*                     repeat = atoi(argv[0]); */
+/*                     if (argc > 1 && repeat) { */
+/*                         skipargs = 1; */
+/*                     } else { */
+/*                         repeat = 1; */
+/*                     } */
 
-                    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn);
+/*                     issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn); */
 
-					if(deadServer > 2){
-                        printf("Warning:More than 2 servers not connected\n");
-                    }
-				} else {
-                    long long start_time = mstime(), elapsed;
-                    int repeat, skipargs = 0;
+/* 					if(deadServer > 2){ */
+/*                         printf("Warning:More than 2 servers not connected\n"); */
+/*                     } */
+/* 				} else { */
+/*                     long long start_time = mstime(), elapsed; */
+/*                     int repeat, skipargs = 0; */
 					
-                    repeat = atoi(argv[0]);
-                    if (argc > 1 && repeat) {
-                        skipargs = 1;
-                    } else {
-                        repeat = 1;
-                    }
+/*                     repeat = atoi(argv[0]); */
+/*                     if (argc > 1 && repeat) { */
+/*                         skipargs = 1; */
+/*                     } else { */
+/*                         repeat = 1; */
+/*                     } */
 
-                    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, sn);
+/*                     issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, sn); */
 
-					if(deadServer > 2){
-						printf("Warning: More than 2 servers not connected\n");
-					}
+/* 					if(deadServer > 2){ */
+/* 						printf("Warning: More than 2 servers not connected\n"); */
+/* 					} */
 					
-                    elapsed = mstime()-start_time;
-                    if (elapsed >= 500) {
-                        printf("(%.2fs)\n",(double)elapsed/1000);
-                    }
-                }
-            }
-            /* Free the argument vector */
-            sdsfreesplitres(argv,argc);
-        }
-        /* linenoise() returns malloc-ed lines like readline() */
-        free(line);
-    }
-    exit(0);
-}
+/*                     elapsed = mstime()-start_time; */
+/*                     if (elapsed >= 500) { */
+/*                         printf("(%.2fs)\n",(double)elapsed/1000); */
+/*                     } */
+/*                 } */
+/*             } */
+/*             /\* Free the argument vector *\/ */
+/*             sdsfreesplitres(argv,argc); */
+/*         } */
+/*         /\* linenoise() returns malloc-ed lines like readline() *\/ */
+/*         free(line); */
+/*     } */
+/*     exit(0); */
+/* } */
 
-static int noninteractive(int argc, char **argv, int sn) {
-    int retval = 0;
-    if (config[sn].stdinarg) {
-        argv = zrealloc(argv, (argc+1)*sizeof(char*));
-        argv[argc] = readArgFromStdin();
-        retval = issueCommand(argc+1, argv, sn);
-    } else {
-        retval = issueCommand(argc, argv, sn);
-    }
-    return retval;
-}
+/* static int noninteractive(int argc, char **argv, int sn) { */
+/*     int retval = 0; */
+/*     if (config[sn].stdinarg) { */
+/*         argv = zrealloc(argv, (argc+1)*sizeof(char*)); */
+/*         argv[argc] = readArgFromStdin(); */
+/*         retval = issueCommand(argc+1, argv, sn); */
+/*     } else { */
+/*         retval = issueCommand(argc, argv, sn); */
+/*     } */
+/*     return retval; */
+/* } */
 
 /*------------------------------------------------------------------------------
  * Eval mode
  *--------------------------------------------------------------------------- */
 
-static int evalMode(int argc, char **argv, int sn) {
-    sds script = sdsempty();
-    FILE *fp;
-    char buf[1024];
-    size_t nread;
-    char **argv2;
-    int j, got_comma = 0, keys = 0;
+/* static int evalMode(int argc, char **argv, int sn) { */
+/*     sds script = sdsempty(); */
+/*     FILE *fp; */
+/*     char buf[1024]; */
+/*     size_t nread; */
+/*     char **argv2; */
+/*     int j, got_comma = 0, keys = 0; */
 
-    /* Load the script from the file, as an sds string. */
-    fp = fopen(config[sn].eval,"r");
-    if (!fp) {
-        fprintf(stderr,
-				"Can't open file '%s': %s\n", config[sn].eval, strerror(errno));
-        exit(1);
-    }
-    while((nread = fread(buf,1,sizeof(buf),fp)) != 0) {
-        script = sdscatlen(script,buf,nread);
-    }
-    fclose(fp);
+/*     /\* Load the script from the file, as an sds string. *\/ */
+/*     fp = fopen(config[sn].eval,"r"); */
+/*     if (!fp) { */
+/*         fprintf(stderr, */
+/* 				"Can't open file '%s': %s\n", config[sn].eval, strerror(errno)); */
+/*         exit(1); */
+/*     } */
+/*     while((nread = fread(buf,1,sizeof(buf),fp)) != 0) { */
+/*         script = sdscatlen(script,buf,nread); */
+/*     } */
+/*     fclose(fp); */
 
-    /* Create our argument vector */
-    argv2 = zmalloc(sizeof(sds)*(argc+3));
-    argv2[0] = sdsnew("EVAL");
-    argv2[1] = script;
-    for (j = 0; j < argc; j++) {
-        if (!got_comma && argv[j][0] == ',' && argv[j][1] == 0) {
-            got_comma = 1;
-            continue;
-        }
-        argv2[j+3-got_comma] = sdsnew(argv[j]);
-        if (!got_comma) keys++;
-    }
-    argv2[2] = sdscatprintf(sdsempty(),"%d",keys);
+/*     /\* Create our argument vector *\/ */
+/*     argv2 = zmalloc(sizeof(sds)*(argc+3)); */
+/*     argv2[0] = sdsnew("EVAL"); */
+/*     argv2[1] = script; */
+/*     for (j = 0; j < argc; j++) { */
+/*         if (!got_comma && argv[j][0] == ',' && argv[j][1] == 0) { */
+/*             got_comma = 1; */
+/*             continue; */
+/*         } */
+/*         argv2[j+3-got_comma] = sdsnew(argv[j]); */
+/*         if (!got_comma) keys++; */
+/*     } */
+/*     argv2[2] = sdscatprintf(sdsempty(),"%d",keys); */
 
-    /* Call it */
-    return issueCommand(argc+3-got_comma, argv2, sn);
-}
+/*     /\* Call it *\/ */
+/*     return issueCommand(argc+3-got_comma, argv2, sn); */
+/* } */
 
 /*------------------------------------------------------------------------------
  * Latency and latency history modes
@@ -1393,7 +1394,7 @@ unsigned long long sendSync(int fd) {
     return strtoull(buf+1,NULL,10);
 }
 
-static void slaveMode(int sn) {
+static void slaveMode(int sn, sds *result) {
     int fd = context[sn]->fd;
     unsigned long long payload = sendSync(fd);
     char buf[1024];
@@ -1417,7 +1418,7 @@ static void slaveMode(int sn) {
 
     /* Now we can use hiredis to read the incoming protocol. */
     config[sn].output = OUTPUT_CSV;
-    while (cliReadReply(0, 1) == REDIS_OK);
+    while (cliReadReply(0, 1, result) == REDIS_OK);
     config[sn].output = original_output;
 }
 
@@ -1943,32 +1944,6 @@ static long getLongInfoField(char *info, char *field) {
     return l;
 }
 
-/* Convert number of bytes into a human readable string of the form:
- * 100B, 2G, 100M, 4K, and so forth. */
-void bytesToHuman(char *s, long long n) {
-    double d;
-
-    if (n < 0) {
-        *s = '-';
-        s++;
-        n = -n;
-    }
-    if (n < 1024) {
-        /* Bytes */
-        sprintf(s,"%lldB",n);
-        return;
-    } else if (n < (1024*1024)) {
-        d = (double)n/(1024);
-        sprintf(s,"%.2fK",d);
-    } else if (n < (1024LL*1024*1024)) {
-        d = (double)n/(1024*1024);
-        sprintf(s,"%.2fM",d);
-    } else if (n < (1024LL*1024*1024*1024)) {
-        d = (double)n/(1024LL*1024*1024);
-        sprintf(s,"%.2fG",d);
-    }
-}
-
 static void statMode(int sn) {
     redisReply *reply;
     long aux, requests = 0;
@@ -2249,7 +2224,7 @@ static void intrinsicLatencyMode(int sn) {
     }
 }
 
-void initConnectConfig(int sn)
+static void initConnectConfig(int sn)
 {
     config[sn].hostip = sdsnew("127.0.0.1");
     config[sn].hostport = 6380 + sn;
@@ -2287,29 +2262,61 @@ void initConnectConfig(int sn)
  * Program main()
  *--------------------------------------------------------------------------- */
 
-void backend_init() {
-	for (int i = 0; i < ALL_SERVER_NUM; i++)
-	{
-		initConnectConfig(i);
-	}
+void singleReplHandler(struct aeEventLoop *ae, int fd, void *cfd, int mask);
 
-    spectrum_palette = spectrum_palette_color;
-    spectrum_palette_size = spectrum_palette_color_size;
-
-	for (int i = 0; i < ALL_SERVER_NUM; i++)
-	{
-		if (!isatty(fileno(stdout)) && (getenv("FAKETTY") == NULL))
-			config[i].output = OUTPUT_RAW;
-		else
-			config[i].output = OUTPUT_STANDARD;
-		config[i].mb_delim = sdsnew("\n");
-	}
-    cliInitHelp();
+void addSingleReplHandler(struct aeEventLoop *ae, int sn, void *cfd) {
+	aeCreateFileEvent(ae, context[sn]->fd, AE_WRITABLE, singleReplHandler, cfd);
 }
 
-int main(int argc, char **argv) {
-    int firstarg;
+void singleReplHandler(struct aeEventLoop *ae, int fd, void *cfd, int mask) {
+	
+}
 
+void singleRepl(sds *argv, int argc, int sn, sds *result) {
+	*result = sdsempty();
+	if (argv == NULL) {
+		printf("Invalid argument(s)\n");
+		return;
+	} else if (argc > 0) {
+		//printf("strcmp():%d", strcasecmp(argv[0],"fget"));
+		if (strcasecmp(argv[0],"quit") == 0 ||
+			strcasecmp(argv[0],"exit") == 0)
+		{
+			exit(0);
+		} else if (argc == 3 && !strcasecmp(argv[0],"connect")) {
+			sdsfree(config[sn].hostip);
+			config[sn].hostip = sdsnew(argv[1]);
+			config[sn].hostport = atoi(argv[2]);
+			cliRefreshPrompt(sn);
+			cliConnect(1, sn);
+		} else if (argc == 1 && !strcasecmp(argv[0],"clear")) {
+			linenoiseClearScreen();
+		} else {
+			long long start_time = mstime(), elapsed;
+			int repeat, skipargs = 0;
+					
+			repeat = atoi(argv[0]);
+			if (argc > 1 && repeat) {
+				skipargs = 1;
+			} else {
+				repeat = 1;
+			}
+
+			issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, sn, result);
+
+			if(deadServer > 2){
+				printf("Warning: More than 2 servers not connected\n");
+			}
+					
+			elapsed = mstime()-start_time;
+			if (elapsed >= 500) {
+				printf("(%.2fs)\n",(double)elapsed/1000);
+			}
+		}
+	}
+}
+
+void backendInit(void) {
 	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
 		initConnectConfig(i);
@@ -2327,95 +2334,14 @@ int main(int argc, char **argv) {
 		config[i].mb_delim = sdsnew("\n");
 	}
     cliInitHelp();
-
-    firstarg = parseOptions(argc,argv,0);
-    argc -= firstarg;
-    argv += firstarg;
-
-    /* Latency mode */
-    if (config[0].latency_mode) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        latencyMode(0);
-    }
-
-    /* Latency distribution mode */
-    if (config[0].latency_dist_mode) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        latencyDistMode(0);
-    }
-
-    /* Slave mode */
-    if (config[0].slave_mode) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        slaveMode(0);
-    }
-
-    /* Get RDB mode. */
-    if (config[0].getrdb_mode) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        getRDB(0);
-    }
-
-    /* Pipe mode */
-    if (config[0].pipe_mode) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        pipeMode(0);
-    }
-
-    /* Find big keys */
-    if (config[0].bigkeys) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        findBigKeys(0);
-    }
-
-    /* Stat mode */
-    if (config[0].stat_mode) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        if (config[0].interval == 0) config[0].interval = 1000000;
-        statMode(0);
-    }
-
-    /* Scan mode */
-    if (config[0].scan_mode) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        scanMode(0);
-    }
-
-    /* LRU test mode */
-    if (config[0].lru_test_mode) {
-        if (cliConnect(0, 0) == REDIS_ERR) exit(1);
-        LRUTestMode(0);
-    }
-    /* Intrinsic latency mode */
-    if (config[0].intrinsic_latency_mode) intrinsicLatencyMode(0);
-
-    /* Start interactive mode when no command is provided */
-    if (argc == 0 && !config[0].eval) {
-		printf("Starting connection on normal mode\n");
-        /* Ignore SIGPIPE in interactive mode to force a reconnect */
-        signal(SIGPIPE, SIG_IGN);
-
-        /* Note that in repl mode we don't abort on connection error.
-         * A new attempt will be performed for every command send. */
-
-		for (int i = 0; i < ALL_SERVER_NUM; i++)
-		{
-			cliConnect(0, i);
-		}
-        repl(0);
-    }
-    if (argc == 1){
-		printf("If argument is 1, open 6381 port only:\n");
-		signal(SIGPIPE, SIG_IGN);
-		cliConnect(0,1);
-		repl(1);
-    }
-
-    /* Otherwise, we have some arguments to execute */
-    if (cliConnect(0, 0) != REDIS_OK) {exit(1); printf("exception\n");}
-    if (config[0].eval) {
-        return evalMode(argc,argv,0);
-    } else {
-        return noninteractive(argc,convertToSds(argc,argv),0);
-    }
+	
+	signal(SIGPIPE, SIG_IGN);
+	
+	/* Note that in repl mode we don't abort on connection error.
+	 * A new attempt will be performed for every command send. */
+	
+	for (int i = 0; i < ALL_SERVER_NUM; i++)
+	{
+		cliConnect(0, i);
+	}
 }

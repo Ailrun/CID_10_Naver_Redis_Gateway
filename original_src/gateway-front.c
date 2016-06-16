@@ -93,7 +93,7 @@ void setGenericCommand(redisClient *c, int flags, robj *key, robj *val, robj *ex
 }
 
 /* SET key value [NX] [XX] [EX <seconds>] [PX <milliseconds>] */
-void setCommand(redisClient *c) {
+void gateSetCommand(redisClient *c) {
     int j;
     robj *expire = NULL;
     int unit = UNIT_SECONDS;
@@ -127,8 +127,37 @@ void setCommand(redisClient *c) {
     }
 	*/
 
-    c->argv[2] = tryObjectEncoding(c->argv[2]);
-    setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
+	sds argv[3];
+	argv[0] = sdsnew("set");
+	argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+	argv[2] = sdsnewlen(c->argv[2]->ptr, sdslen(c->argv[2]->ptr));
+
+	sds result;
+	sds okstr = sdsnew("OK\n");
+
+	int checker = 0;
+	for (int i = 0; i < ALL_SERVER_NUM; i++)
+	{
+		singleRepl(argv, 3, i, &result);
+		checker = checker || sdscmp(result, okstr) == 0;
+		sdsfree(result);
+	}
+
+ 	sdsfree(argv[0]);
+	sdsfree(argv[1]);
+	sdsfree(argv[2]);
+	sdsfree(okstr);
+
+	if (checker)
+	{
+		addReply(c, shared.ok);
+		return;
+	}
+
+	addReply(c,shared.syntaxerr);
+	// c->argv[2] = tryObjectEncoding(c->argv[2]);
+	// printf("%d, %d : %s\n", c->argv[2]->type, sdsEncodedObject(c->argv[2]), strEncoding(c->argv[2]->encoding));
+    // setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 }
 
 void setnxCommand(redisClient *c) {
@@ -161,8 +190,69 @@ int getGenericCommand(redisClient *c) {
     }
 }
 
-void getCommand(redisClient *c) {
-    getGenericCommand(c);
+void gateGetCommand(redisClient *c) {
+	sds argv[2];
+	argv[0] = sdsnew("get");
+	argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+
+	sds result;
+	sds nilstr = sdsnew("nil");
+
+	robj *obj;
+	int send = 0;
+	for (int i = 0; i < ALL_SERVER_NUM; i++)
+	{
+		singleRepl(argv, 2, i, &result);
+		sdsrange(result, 1, -3);
+
+		if (sdscmp(result, nilstr) != 0)
+		{
+			obj = createObject(REDIS_STRING, result);
+			addReplyBulk(c, obj);
+			freeStringObject(obj);
+			send = 1;
+			break;
+		}
+
+		sdsfree(result);
+	}
+	
+	sdsfree(argv[0]);
+	sdsfree(argv[1]);
+	sdsfree(nilstr);
+
+	if (!send)
+	{
+        addReply(c, shared.nullbulk);
+	}
+    // getGenericCommand(c);
+}
+
+void gateDelCommand(redisClient *c) {
+	sds argv[2];
+	argv[0] = sdsnew("del");
+	argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+
+	sds result;
+	long long v;
+	long long max;
+
+	for (int i = 0; i < ALL_SERVER_NUM; i++)
+	{
+		singleRepl(argv, 2, i, &result);
+		sdsrange(result, -2, -2);
+		v = atoi(result);
+		sdsfree(result);
+
+		if (max < v)
+		{
+			max = v;
+		}
+	}
+	sdsfree(argv[0]);
+	sdsfree(argv[1]);
+
+	addReplyLongLong(c, v); 
 }
 
 void getsetCommand(redisClient *c) {
