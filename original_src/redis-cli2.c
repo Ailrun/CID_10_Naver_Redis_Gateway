@@ -1295,7 +1295,41 @@ static void repl(int sn) {
 		    if(deadServer > 2){
 			printf("Warning:More than 2 servers not connected\n");
 		    }
-                } else {
+                } else if (argc == 4 && !strcasecmp(argv[0],"fset")) {
+                    argc--;
+                    argv[0] = sdsnewlen("set",3);
+                    int repeat, skipargs = 0;
+                    int nsn = 0;
+                    nsn = atoi(argv[3]);
+                    repeat = atoi(argv[0]);
+                    if (argc > 1 && repeat) {
+                    	skipargs = 1;
+                    } else {
+                    	repeat = 1;
+                    }
+                    
+		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn);
+                    if(deadServer > 2){
+			printf("Warning:More than 2 servers not connected\n");
+                    }
+                } else if (argc == 3 && !strcasecmp(argv[0],"fdel")) {
+                    argc--;
+                    argv[0] = sdsnewlen("del",3);
+                    int repeat, skipargs = 0;
+                    int nsn = 0;
+                    nsn = atoi(argv[2]);
+                    repeat = atoi(argv[0]);
+                    if (argc > 1 && repeat) {
+                        skipargs = 1;
+                    } else {
+                        repeat = 1;
+                    }
+
+                    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn);
+                    if(deadServer > 2){
+                        printf("Warning:More than 2 servers not connected\n");
+                    }
+                 } else {
                     long long start_time = mstime(), elapsed;
                     int repeat, skipargs = 0;
 
