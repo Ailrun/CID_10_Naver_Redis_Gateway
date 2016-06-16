@@ -52,7 +52,7 @@
 #include "linenoise.h"
 #include "help.h"
 #include "anet.h"
-#include "ae.h"
+#include "ae2.h"
 
 #define REDIS_NOTUSED(V) ((void) V)
 
@@ -1110,6 +1110,8 @@ static int issueCommandRepeat(int argc, char **argv, long repeat, int sn) {
     struct config *cf = malloc(sizeof(struct config));
     struct redisContext *c = malloc(sizeof(struct redisContext));
 
+    //printf("%s\n", argv[0]);
+
     switch(sn){
         case 1:
            cf = &config;
@@ -1262,6 +1264,7 @@ static void repl(int sn) {
                 free(line);
                 continue;
             } else if (argc > 0) {
+		//printf("strcmp():%d", strcasecmp(argv[0],"fget"));
                 if (strcasecmp(argv[0],"quit") == 0 ||
                     strcasecmp(argv[0],"exit") == 0)
                 {
@@ -1274,6 +1277,24 @@ static void repl(int sn) {
                     cliConnect(c, 1, sn);
                 } else if (argc == 1 && !strcasecmp(argv[0],"clear")) {
                     linenoiseClearScreen();
+		} else if (argc == 3 && !strcasecmp(argv[0],"fget")) {
+		    argc--;
+		    argv[0] = sdsnewlen("get",3); 
+		    int repeat, skipargs = 0;
+		    int nsn = 0;
+		    nsn = atoi(argv[2]);
+		    //printf("%d", nsn);
+		    repeat = atoi(argv[0]);
+		    if (argc > 1 && repeat) {
+			skipargs = 1;
+		    } else { 
+			repeat = 1;
+		    }
+		    
+		    issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, nsn);
+		    if(deadServer > 2){
+			printf("Warning:More than 2 servers not connected\n");
+		    }
                 } else {
                     long long start_time = mstime(), elapsed;
                     int repeat, skipargs = 0;
