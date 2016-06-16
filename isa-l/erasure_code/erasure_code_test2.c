@@ -64,6 +64,9 @@
 
 typedef unsigned char u8;
 
+static unsigned char *encode_matrix;
+static int m;
+static int k;
 void dump(unsigned char *buf, int len)
 {
 	int i;
@@ -220,6 +223,70 @@ unsigned char* signedtounsigned(char* s, int n){
 	}
 	return a;
 }
+int init0(){
+//	unsigned char *g_tbls;
+	encode_matrix = malloc(MMAX*KMAX);
+//	g_tbls = malloc(KMAX * TEST_SOURCES * 32);
+	m = 6;
+	k = 4;
+	if(encode_matrix != NULL)
+		return 0;
+	else
+		return -1;
+}
+int init2(int input_data, int input_parity){
+//	unsigned char *g_tbls;
+	encode_matrix = malloc(MMAX*KMAX);
+//	g_tbls = malloc(KMAX * TEST_SOURCES * 32);
+	if( input_data + input_parity > MMAX || input_data > KMAX){
+		printf("too larger # of data blocks!");
+		return -1;
+	}
+	m = input_data + input_parity;
+	k = input_data;	
+	if(encode_matrix != NULL)
+		return 0;
+	else
+		return -1;
+}
+unsigned char* encode(char * origin_data){
+	int len = strlen(origin_data);
+	int n = len / k;
+	int md = len % k;
+	int i = 0;
+	
+	char *strip_data[k];
+	for(i = 0; i < m; i++){
+		strip_data[i] = (char *)malloc((n+1)*sizeof(char));
+		strncpy(strip_data[i], origin_data + (n +1) * i, n + 1);
+	}
+
+	for(i = m; i< k; i++){
+		strip_data[i] = (char *)malloc(n*sizeof(char));
+		strncpy(strip_data[i], origin_data + (n+1) * md + n *(i - md),n);
+	}
+	
+
+
+	void *buf;
+	unsigned char *buffs[TEST_SOURCES];
+	unsigned char *g_tbls;
+	for ( i = 0 ; i < TEST_SOURCES; i++){
+		if(posix_memalign(&buf, 64, TEST_LEN)) {
+			printf("alloc error: FAIL");
+			return -1;
+		}
+		buffs[i]=buf;
+	}
+	for( i = 0 ; i < k ; i ++ )
+		buffs[i] = signedtounsigned(strip_data[i], TEST_SOURCES); 
+	
+	gf_gen_rs_matrix(encode_matrix, m , k);
+	ec_init_tables(k, m-k, &encode_matrix[k*k], g_tbls);
+	ec_encode_data(TEST_LEN, k , m-k, g_tbls, buffs, &buffs[k]);
+	return buffs;
+}
+
 /*
 int main(int argc, char *argv[])
 {
