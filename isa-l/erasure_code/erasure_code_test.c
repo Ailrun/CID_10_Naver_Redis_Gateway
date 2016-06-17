@@ -64,6 +64,9 @@
 
 typedef unsigned char u8;
 
+static unsigned char *Enc_matrix;
+static int TB; //total block
+static int DB; //data block
 void dump(unsigned char *buf, int len)
 {
 	int i;
@@ -212,14 +215,153 @@ static int gf_gen_decode_matrix(unsigned char *encode_matrix,
 	return 0;
 }
 
-unsigned char* signedtounsigned(char* s, int n){
-	unsigned char* a = (unsigned char *)malloc(n*sizeof(unsigned char));
+unsigned char* signedtounsigned(char* str, int n){
+	unsigned char* result = (unsigned char *)malloc(n*sizeof(unsigned char));
 	for(int i = 0; i < n; i++){
-		if(s[i] == '\0') break;
-		a[i] = s[i];
+		if(str[i] == '\0') break;
+		result[i] = str[i];
 	}
-	return a;
+	return result;
 }
+
+unsigned char * rearrange(unsigned char* recov[], unsigned char* temp_buffs[], int ind, unsigned int decode_index[]){
+	int i = 0,j = 0,l = 0;
+	unsigned char * result;
+	result = (unsigned char *) calloc (4096,sizeof(unsigned char *));
+	for( i = 0 ; i < DB ; i ++) {
+		if(decode_index[j] != i ){
+			//result[i] = (unsigned char*) malloc(sizeof(strlen((char *)temp_buffs[l])));
+			strcat((char *)result, (char *)temp_buffs[l+DB]);
+			//strcpy( result[i], temp_buffs[l]);
+			l++;
+		}
+		else{
+			//result[i] = (unsigned char*) malloc(sizeof(strlen((char *)recov[j])));
+			//strcpy( result[i], recov[j]);
+			strcat((char *)result, (char *)recov[j]);
+			j++;
+		}
+	}
+	if( result != NULL)
+		return result;
+	else
+		return NULL;
+}
+/*
+ 	if user wants to change # of data block and parity block,
+	then the uesr uses arguments that represent "--m 4 --p 3".
+	In that case, we supply init2 function.
+	other cases, we supply init0 function.
+ */
+int init0(void){
+	Enc_matrix = malloc(MMAX*KMAX);
+	TB = 6;
+	DB = 4;
+	if(Enc_matrix != NULL)
+		return 0;
+	else
+		return -1;
+}
+
+int init2(int data_block_num, int parity_block_num){
+	Enc_matrix = malloc(MMAX*KMAX);
+	if( data_block_num + parity_block_num > MMAX || data_block_num > KMAX){
+		printf("too larger # of data blocks!");
+		return -1;
+	}
+	TB = data_block_num + parity_block_num;
+	DB = data_block_num;	
+	if(Enc_matrix != NULL)
+		return 0;
+	else
+		return -1;
+}
+unsigned char** encode(char * origin_data){
+	int len = strlen(origin_data);
+	int n = len / DB;
+	int md = len % DB;
+	int i = 0;
+	
+	char *strip_data[DB];
+	for(i = 0; i < md; i++){
+		strip_data[i] = (char *)malloc((n+1)*sizeof(char));
+		strncpy(strip_data[i], origin_data + (n +1) * i, n + 1);
+	}
+
+	for(i = md; i< DB; i++){
+		strip_data[i] = (char *)malloc(n*sizeof(char));
+		strncpy(strip_data[i], origin_data + (n+1) * md + n *(i - md),n);
+	}
+
+	void *buf;
+	unsigned char *buffs[TEST_SOURCES];
+	unsigned char *g_tbls=malloc(KMAX * TEST_SOURCES * 32);
+	for ( i = 0 ; i < TEST_SOURCES; i++){
+		if(posix_memalign(&buf, 64, TEST_LEN)) {
+			printf("alloc error: FAIL");
+			return -1;
+		}
+		buffs[i]=buf;
+	}
+	for( i = 0 ; i < DB ; i++ )
+		buffs[i] = signedtounsigned(strip_data[i], TEST_SOURCES); 
+	gf_gen_rs_matrix(Enc_matrix, TB , DB);
+	ec_init_tables(DB, TB-DB, &Enc_matrix[DB*DB], g_tbls);
+	ec_encode_data(TEST_LEN, DB , TB-DB, g_tbls, buffs, &buffs[DB]);
+	return buffs;
+}
+/*
+ * 	buffs : integrated data block from each server
+ *  src_in_err : boolean table?  length is TEST_SOURCES
+ 		switch (value of element)
+			case : 0 => alive server
+			case : 1 => failure server
+		e.g.
+			[ 0 | 0 | 1 | 0 | 1 | 0 | ... ] => server0, server1, server3, server5 is alive and server2, server4 is dead.
+ *	src_err_list : this array saves failure sever indexes, length is TEST_SOURCES
+ 		e.g.
+			[ 2 | 4 | ?? | ...] => in above case, this is appropriate src_err_list.
+ *
+ * nerrs : # of total failure server.
+ * nsrcerrs : # of total failure server that saves data block not parity block.
+ */
+ 
+unsigned char** decode(unsigned char* buffs[], unsigned char src_in_err[], unsigned char src_err_list[], int nerrs, int nsrcerrs){
+	int i,re = 0;
+	void *buf;
+	unsigned int decode_index[MMAX];
+	unsigned char *temp_buffs[TEST_SOURCES];
+	unsigned char *decode_matrix, *invert_matrix, *g_tbls;
+	unsigned char *recov[TEST_SOURCES];
+	
+	for( i = 0 ; i < TEST_SOURCES; i++) {
+		if (posix_memalign(&buf, 64, TEST_LEN)){
+			printf("alloc error: FAIl\n");
+			return -1;
+		}
+		temp_buffs[i]=buf;
+	}
+	decode_matrix = malloc (MMAX*KMAX);
+	invert_matrix = malloc (MMAX*KMAX);
+	g_tbls = malloc (KMAX * TEST_SOURCES * 32);
+	re = gf_gen_decode_matrix(Enc_matrix, decode_matrix, invert_matrix, decode_index, src_err_list, src_in_err, nerrs, nsrcerrs, DB, TB);
+	if( re != 0){
+		printf("Fail to gf_gen_decode_matrix\n");
+		return -1;
+	}
+	for ( i = 0 ; i < DB ; i++ )
+		recov[i]=buffs[decode_index[i]];
+	ec_init_tables(DB, nerrs, decode_matrix, g_tbls);
+	ec_encode_data(TEST_LEN, DB, nerrs, g_tbls, recov, &temp_buffs[DB]);
+	return rearrange(recov, temp_buffs, DB, decode_index);
+}
+void allign (char* output[TEST_SOURCES], char **input){
+	int i;
+	for (i = 0 ;  i < TB; i++){
+		output[i] = input[i];
+	}
+}
+
 /*
 int main(int argc, char *argv[])
 {
@@ -302,19 +444,19 @@ int main(int argc, char *argv[])
 	for(i=0; i<m ; i++) 
 		fprintf(stdout,"%s\n",(char *)buffs[i]);
 
- *	set operation 
+ //	set operation 
 
 
 	buffs -> data , &buffs[k]->parity : gateway sends each data block to each server
  	encode_matrix is static variable  
-
+//
 	// Choose random buffers to be in erasure
 	memset(src_in_err, 0, TEST_SOURCES);
 	gen_err_list(src_err_list, src_in_err, &nerrs, &nsrcerrs, k, m);
 
 
 
-
+//
  *	get operation
 
  	src_err_list	: position of error block
@@ -328,7 +470,7 @@ int main(int argc, char *argv[])
 
  	<output>
 	decode_index 	: alive data block indexes (but k-1 index value can't reasoning)   
-
+//
 	// Generate decode matrix
 	re = gf_gen_decode_matrix(encode_matrix, decode_matrix,
 				  invert_matrix, decode_index, src_err_list, src_in_err,
@@ -374,7 +516,7 @@ int main(int argc, char *argv[])
 		printf("%s\n",recov[i]);
 	for(i=k; i<m;i++)
 		printf("%s\n",temp_buffs[i]);
-
+//
  *	if user sends get operation to gateway, gateway sends ____ data blocks to client.
  *  maybe reconstruct (rearrangement) is needed.
  
@@ -810,4 +952,5 @@ int main(int argc, char *argv[])
 
 	printf("done EC tests: Pass\n");
 	return 0;
-}*/
+}
+*/
