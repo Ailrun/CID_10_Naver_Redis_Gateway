@@ -1,0 +1,3 @@
+#define REDIS_GIT_SHA1 "92009136"
+#define REDIS_GIT_DIRTY "82457"
+#define REDIS_BUILD_ID "readys-gateway-1466122524"

@@ -1,41 +1,27 @@
 #ifndef GATEWAY_H_
-#define GATEWAY_H_
 
-#include <unistd.h>
-#include <signal.h>
-#include <pthread.h>
+#define DATA_SERVER_NUM 0
+#define PARITY_SERVER_NUM 6
+#define ALL_SERVER_NUM (DATA_SERVER_NUM + PARITY_SERVER_NUM)
 
-#include "ae.h"
-#include "anet.h"
+#define LOCALHOST ("127.0.0.1")
 
-#define GATEWAY_DEFAULT_PORT 10001
-
-#define GATEWAY_TCP_BACKLOG 511
-
-#define GATEWAY_BINDADDR_MAX 16
-
-#define GATEWAY_MAX_CLIENT 1000
-#define GATEWAY_DATA_SERVER_NUMBER 4
-#define GATEWAY_PARITY_SERVER_NUMBER 2
-
-struct redisGateway
-{
-    pid_t pid;
-    aeEventLoop el;
-
-    int port;
-    int tcp_backlog;
-    char *bindaddr[GATEWAY_BINDADDR_MAX];
-    int bindaddr_count;
-    int ipfd[GATEWAY_BINDADDR_MAX];
-    int ipfd_count;
-    char neterr[ANET_ERR_LEN];
-
-    int max_client;
-    int data_server_number;
-    int parity_server_number;
+static struct {
+  char *hostip;
+  int port;
+} allServerConfigs[ALL_SERVER_NUM] = {
+  {LOCALHOST, 6380},
+  {LOCALHOST, 6381},
+  {LOCALHOST, 6382},
+  {LOCALHOST, 6383},
+  {LOCALHOST, 6384},
+  {LOCALHOST, 6385}
 };
 
-void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask);
+void bytesToHuman(char *s, unsigned long long n);
 
-#endif /* #ifndef GATEWAY_H_ */
+void backendInit(void);
+void resetDeadServer(void);
+int getDeadServer(void);
+void singleRepl(sds *argv, int argc, int sn, sds *result);
+#endif // #ifndef GATEWAY_H_
