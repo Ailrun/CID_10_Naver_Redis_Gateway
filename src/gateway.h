@@ -1,5 +1,6 @@
 #ifndef GATEWAY_H_
 
+<<<<<<< HEAD
 #define DATA_SERVER_NUM 4
 #define PARITY_SERVER_NUM 2
 #define ALL_SERVER_NUM (DATA_SERVER_NUM + PARITY_SERVER_NUM)
@@ -11,5 +12,30 @@ void gateGetCommand(redisClient *c);
 void gateDelCommand(redisClient *c);
 
 void backendInit(void);
+=======
+#define DATA_SERVER_NUM 0
+#define PARITY_SERVER_NUM 6
+#define ALL_SERVER_NUM (DATA_SERVER_NUM + PARITY_SERVER_NUM)
+
+#define LOCALHOST ("127.0.0.1")
+
+static struct {
+  char *hostip;
+  int port;
+} allServerConfigs[ALL_SERVER_NUM] = {
+  {LOCALHOST, 6380},
+  {LOCALHOST, 6381},
+  {LOCALHOST, 6382},
+  {LOCALHOST, 6383},
+  {LOCALHOST, 6384},
+  {LOCALHOST, 6385}
+};
+
+void bytesToHuman(char *s, unsigned long long n);
+
+void backendInit(void);
+void resetDeadServer(void);
+int getDeadServer(void);
+>>>>>>> d216d12a6798faf9d645ae7d396e8e177fb9c77d
 void singleRepl(sds *argv, int argc, int sn, sds *result);
 #endif // #ifndef GATEWAY_H_

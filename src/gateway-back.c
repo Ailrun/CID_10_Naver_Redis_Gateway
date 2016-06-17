@@ -418,7 +418,6 @@ static int cliConnect(int force, int sn) {
 }
 
 static void cliPrintContextError(int sn) {
-	deadServer++;
     //printf("context in cliPrintContextError: %d\n",(int)c);
     if (context[sn] == NULL) return;
     //printf("c is not null! ");
@@ -2226,8 +2225,8 @@ static void intrinsicLatencyMode(int sn) {
 
 static void initConnectConfig(int sn)
 {
-    config[sn].hostip = sdsnew("127.0.0.1");
-    config[sn].hostport = 6380 + sn;
+    config[sn].hostip = sdsnew(allServerConfigs[sn].hostip);
+    config[sn].hostport = allServerConfigs[sn].port;
     config[sn].hostsocket = NULL;
     config[sn].repeat = 1;
     config[sn].interval = 0;
@@ -2272,44 +2271,72 @@ void singleReplHandler(struct aeEventLoop *ae, int fd, void *cfd, int mask) {
 	
 }
 
-void singleRepl(sds *argv, int argc, int sn, sds *result) {
+void resetDeadServer(void)
+{
+	deadServer = 0;
+}
+
+int getDeadServer(void)
+{
+	return deadServer;
+}
+
+void singleRepl(sds *argv, int argc, int sn, sds *result)
+{
 	*result = sdsempty();
-	if (argv == NULL) {
+	if (argv == NULL)
+	{
 		printf("Invalid argument(s)\n");
 		return;
-	} else if (argc > 0) {
+	}
+	else if (argc > 0)
+	{
 		//printf("strcmp():%d", strcasecmp(argv[0],"fget"));
 		if (strcasecmp(argv[0],"quit") == 0 ||
 			strcasecmp(argv[0],"exit") == 0)
 		{
 			exit(0);
-		} else if (argc == 3 && !strcasecmp(argv[0],"connect")) {
+		}
+		else if (argc == 3 && !strcasecmp(argv[0],"connect"))
+		{
 			sdsfree(config[sn].hostip);
 			config[sn].hostip = sdsnew(argv[1]);
 			config[sn].hostport = atoi(argv[2]);
 			cliRefreshPrompt(sn);
 			cliConnect(1, sn);
-		} else if (argc == 1 && !strcasecmp(argv[0],"clear")) {
+		}
+		else if (argc == 1 && !strcasecmp(argv[0],"clear"))
+		{
 			linenoiseClearScreen();
-		} else {
+		}
+		else
+		{
 			long long start_time = mstime(), elapsed;
 			int repeat, skipargs = 0;
 					
 			repeat = atoi(argv[0]);
-			if (argc > 1 && repeat) {
+			if (argc > 1 && repeat)
+			{
 				skipargs = 1;
-			} else {
+			}
+			else
+			{
 				repeat = 1;
 			}
 
-			issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, sn, result);
+			if (issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, sn, result) != REDIS_OK)
+			{
+				deadServer++;
+			}
 
-			if(deadServer > 2){
-				printf("Warning: More than 2 servers not connected\n");
+			if(deadServer > PARITY_SERVER_NUM)
+			{
+				printf("Warning: More than %d servers not connected\n", PARITY_SERVER_NUM);
 			}
 					
 			elapsed = mstime()-start_time;
-			if (elapsed >= 500) {
+			if (elapsed >= 500)
+			{
 				printf("(%.2fs)\n",(double)elapsed/1000);
 			}
 		}

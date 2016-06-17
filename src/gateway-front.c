@@ -1,4 +1,4 @@
-/*
+B/*
  * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
@@ -31,6 +31,7 @@
 #include <math.h> /* isnan(), isinf() */
 
 #include "gateway.h"
+#include "gateway-front.h"
 
 /*-----------------------------------------------------------------------------
  * String Commands
@@ -135,6 +136,8 @@ void gateSetCommand(redisClient *c) {
 	sds result;
 	sds okstr = sdsnew("OK\n");
 
+	resetDeadServer();
+
 	int checker = 0;
 	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
@@ -142,6 +145,8 @@ void gateSetCommand(redisClient *c) {
 		checker = checker || sdscmp(result, okstr) == 0;
 		sdsfree(result);
 	}
+
+	printf("The Number of Checked Dead Server: %d\n", getDeadServer());
 
  	sdsfree(argv[0]);
 	sdsfree(argv[1]);
@@ -197,6 +202,9 @@ void gateGetCommand(redisClient *c) {
 
 	sds result;
 	sds nilstr = sdsnew("nil");
+	sds emptystr = sdsnew("");
+
+	resetDeadServer();
 
 	robj *obj;
 	int send = 0;
@@ -205,7 +213,7 @@ void gateGetCommand(redisClient *c) {
 		singleRepl(argv, 2, i, &result);
 		sdsrange(result, 1, -3);
 
-		if (sdscmp(result, nilstr) != 0)
+		if (sdscmp(result, nilstr) != 0 && sdscmp(result, emptystr) != 0)
 		{
 			obj = createObject(REDIS_STRING, result);
 			addReplyBulk(c, obj);
@@ -217,9 +225,12 @@ void gateGetCommand(redisClient *c) {
 		sdsfree(result);
 	}
 	
+	printf("The Number of Checked Dead Server: %d\n", getDeadServer());
+
 	sdsfree(argv[0]);
 	sdsfree(argv[1]);
 	sdsfree(nilstr);
+	sdsfree(emptystr);
 
 	if (!send)
 	{
@@ -237,6 +248,8 @@ void gateDelCommand(redisClient *c) {
 	long long v;
 	long long max;
 
+	resetDeadServer();
+	
 	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
 		singleRepl(argv, 2, i, &result);
@@ -249,6 +262,9 @@ void gateDelCommand(redisClient *c) {
 			max = v;
 		}
 	}
+
+	printf("The Number of Dead Server: %d\n", getDeadServer());
+	
 	sdsfree(argv[0]);
 	sdsfree(argv[1]);
 
