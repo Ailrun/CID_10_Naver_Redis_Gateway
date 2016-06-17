@@ -128,32 +128,63 @@ void gateSetCommand(redisClient *c) {
     }
 	*/
 
+	sds okstr = sdsnew("OK\n");
+
 	sds argv[3];
 	argv[0] = sdsnew("set");
 	argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
-	argv[2] = sdsnewlen(c->argv[2]->ptr, sdslen(c->argv[2]->ptr));
-
-	sds result;
-	sds okstr = sdsnew("OK\n");
-
-	resetDeadServer();
+	char *origin = c->argv[2]->ptr;
 
 	int checker = 0;
-	for (int i = 0; i < ALL_SERVER_NUM; i++)
+	int deadServer = 0;
+	
+	if (SAVE_METHOD == RFN_METHOD)
 	{
-		singleRepl(argv, 3, i, &result);
-		checker = checker || sdscmp(result, okstr) == 0;
-		sdsfree(result);
+		argv[2] = sdsnewlen(origin, sdslen(origin));
+		
+		sds rfn_result;
+		
+		for (int i = 0; i < ALL_SERVER_NUM; i++)
+		{
+			if (singleRepl(argv, 3, i, &rfn_result) != REDIS_OK)
+			{
+				deadServer++;
+			}
+			checker = checker || sdscmp(rfn_result, okstr) == 0;
+			sdsfree(rfn_result);
+		}
+
+		sdsfree(argv[2]);
+	}
+	else
+	{
+		sds ec_result;
+
+		char **encoded;
+
+		for (int i = 0; i < ALL_SERVER_NUM; i++)
+		{
+			argv[2] = sdsnewlen(encoded[i], sdslen(encoded[i]));
+
+			if (singleRepl(argv, 3, i, &ec_result) != REDIS_OK)
+			{
+				deadServer++;
+			}
+			checker = checker || sdscmp(ec_result[i], okstr) == 0;
+			sdsfree(ec_result);
+
+			sdsfree(argv[2]);
+		}
 	}
 
-	printf("The Number of Checked Dead Server: %d\n", getDeadServer());
+	printf("Dead: %d\n", deadServer);
 
- 	sdsfree(argv[0]);
-	sdsfree(argv[1]);
-	sdsfree(argv[2]);
 	sdsfree(okstr);
 
-	if (checker)
+	sdsfree(argv[0]);
+	sdsfree(argv[1]);
+
+	if (checker && deadServer <= PARITY_SERVER_NUM)
 	{
 		addReply(c, shared.ok);
 		return;
@@ -200,33 +231,54 @@ void gateGetCommand(redisClient *c) {
 	argv[0] = sdsnew("get");
 	argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
 
-	sds result;
 	sds nilstr = sdsnew("nil");
 	sds emptystr = sdsnew("");
 
-	resetDeadServer();
+	int deadServer = 0;
 
-	robj *obj;
-	int send = 0;
-	for (int i = 0; i < ALL_SERVER_NUM; i++)
+	if (SAVE_METHOD == RFN_METHOD)
 	{
-		singleRepl(argv, 2, i, &result);
-		sdsrange(result, 1, -3);
-
-		if (sdscmp(result, nilstr) != 0 && sdscmp(result, emptystr) != 0)
+		sds rfn_result;
+		robj *obj;
+		int send = 0;
+		for (int i = 0; i < ALL_SERVER_NUM; i++)
 		{
-			obj = createObject(REDIS_STRING, result);
-			addReplyBulk(c, obj);
-			freeStringObject(obj);
-			send = 1;
-			break;
-		}
+			if (singleRepl(argv, 2, i, &rfn_result) != REDIS_OK)
+			{
+				deadServer++;
+			}
+			sdsrange(rfn_result, 1, -3);
 
-		sdsfree(result);
+			if (sdscmp(rfn_result, nilstr) != 0 && sdscmp(rfn_result, emptystr) != 0)
+			{
+				obj = createObject(REDIS_STRING, result);
+				addReplyBulk(c, obj);
+				freeStringObject(obj);
+				send = 1;
+				break;
+			}
+
+			sdsfree(result);
+		}
+	}
+	else
+	{
+		sds ec_result[ALL_SERVER_NUM];
+		for (int i = 0; i < ALL_SERVER_NUM; i++)
+		{
+			if (singleRepl(argv, 2, i, ec_result+i) != REDIS_OK)
+			{
+				deadServer++;
+			}
+			sdsrange(rfn_result, 1, -3);
+
+			if (sdscmp(ec_result[i], nilstr) != 0 && sdscmp(ec_result[i], ))
+			{
+				deadServer++;
+			}
+		}
 	}
 	
-	printf("The Number of Checked Dead Server: %d\n", getDeadServer());
-
 	sdsfree(argv[0]);
 	sdsfree(argv[1]);
 	sdsfree(nilstr);
