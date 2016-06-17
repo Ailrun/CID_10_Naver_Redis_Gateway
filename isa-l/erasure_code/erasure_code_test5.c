@@ -31,42 +31,14 @@
 #include <stdlib.h>
 #include <string.h>		// for memset, memcmp
 #include "erasure_code.h"
+#include "erasure_code_test.h"
 #include "types.h"
 
-#define TEST_LEN 8192
-#define TEST_SIZE (TEST_LEN/2)
+//typedef unsigned char u8;
 
-#ifndef TEST_SOURCES
-# define TEST_SOURCES 16
-#endif
-#ifndef RANDOMS
-# define RANDOMS 200
-#endif
-
-#define MMAX TEST_SOURCES
-#define KMAX TEST_SOURCES
-
-#define EFENCE_TEST_MIN_SIZE 16
-
-#ifdef EC_ALIGNED_ADDR
-// Define power of 2 range to check ptr, len alignment
-# define PTR_ALIGN_CHK_B 0
-# define LEN_ALIGN_CHK_B 0	// 0 for aligned only
-#else
-// Define power of 2 range to check ptr, len alignment
-# define PTR_ALIGN_CHK_B 32
-# define LEN_ALIGN_CHK_B 32	// 0 for aligned only
-#endif
-
-#ifndef TEST_SEED
-#define TEST_SEED 11
-#endif
-
-typedef unsigned char u8;
-
-static unsigned char *Enc_matrix;
-static int TB; //total block
-static int DB; //data block
+//static unsigned char *Enc_matrix;
+//static int TB; //total block
+//static int DB; //data block
 void dump(unsigned char *buf, int len)
 {
 	int i;
@@ -131,7 +103,7 @@ static void gen_err_list(unsigned char *src_err_list,
 	return;
 }
 
-#define NO_INVERT_MATRIX -2
+//#define NO_INVERT_MATRIX -2
 // Generate decode matrix from encode matrix
 static int gf_gen_decode_matrix(unsigned char *encode_matrix,
 				unsigned char *decode_matrix,

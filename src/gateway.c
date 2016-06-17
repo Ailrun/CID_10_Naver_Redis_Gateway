@@ -54,7 +54,10 @@
 #include <locale.h>
 
 #include "gateway.h"
+<<<<<<< HEAD
+=======
 #include "gateway-front.h"
+>>>>>>> d216d12a6798faf9d645ae7d396e8e177fb9c77d
 
 /* Our shared "common" objects */
 
