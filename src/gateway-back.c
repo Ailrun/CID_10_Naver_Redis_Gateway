@@ -424,26 +424,31 @@ static void cliPrintContextError(int sn) {
     fprintf(stderr,"Error: %s\n",context[sn]->errstr);
 }
 
-static sds cliFormatReplyTTY(redisReply *r, char *prefix) {
+static sds cliFormatReplyTTY(redisReply *r, char *prefix, sds *result) {
     sds out = sdsempty();
     switch (r->type) {
     case REDIS_REPLY_ERROR:
+        *result = sdscatprintf(*result,"(error) %s", r->str);
         out = sdscatprintf(out,"(error) %s\n", r->str);
 		break;
     case REDIS_REPLY_STATUS:
+        *result = sdscat(*result,r->str);
         out = sdscat(out,r->str);
         out = sdscat(out,"\n");
 		break;
     case REDIS_REPLY_INTEGER:
+        *result = sdscatprintf(*result,"(integer) %lld",r->integer);
         out = sdscatprintf(out,"(integer) %lld\n",r->integer);
 		break;
     case REDIS_REPLY_STRING:
         /* If you are producing output for the standard output we want
 		 * a more interesting output with quoted characters and so forth */
+        *result = sdscatlen(*result,r->str,r->len);
         out = sdscatrepr(out,r->str,r->len);
         out = sdscat(out,"\n");
 		break;
     case REDIS_REPLY_NIL:
+        *result = sdscat(*result,"(nil)");
         out = sdscat(out,"(nil)\n");
 		break;
     case REDIS_REPLY_ARRAY:
@@ -477,7 +482,7 @@ static sds cliFormatReplyTTY(redisReply *r, char *prefix) {
                 out = sdscatprintf(out,_prefixfmt,i == 0 ? "" : prefix,i+1);
 
                 /* Format the multi bulk entry */
-                tmp = cliFormatReplyTTY(r->element[i],_prefix);
+                tmp = cliFormatReplyTTY(r->element[i],_prefix,result);
                 out = sdscatlen(out,tmp,sdslen(tmp));
                 sdsfree(tmp);
             }
@@ -491,7 +496,7 @@ static sds cliFormatReplyTTY(redisReply *r, char *prefix) {
     return out;
 }
 
-static sds cliFormatReplyRaw(redisReply *r, int sn) {
+static sds cliFormatReplyRaw(redisReply *r, int sn, sds *result) {
     sds out = sdsempty(), tmp;
     size_t i;
 
@@ -500,20 +505,23 @@ static sds cliFormatReplyRaw(redisReply *r, int sn) {
         /* Nothing... */
         break;
     case REDIS_REPLY_ERROR:
+        *result = sdscatlen(*result,r->str,r->len);
         out = sdscatlen(out,r->str,r->len);
         out = sdscatlen(out,"\n",1);
         break;
     case REDIS_REPLY_STATUS:
     case REDIS_REPLY_STRING:
+        *result = sdscatlen(*result,r->str,r->len);
         out = sdscatlen(out,r->str,r->len);
         break;
     case REDIS_REPLY_INTEGER:
+        *result = sdscatprintf(*result,"%lld",r->integer);
         out = sdscatprintf(out,"%lld",r->integer);
         break;
     case REDIS_REPLY_ARRAY:
         for (i = 0; i < r->elements; i++) {
             if (i > 0) out = sdscat(out,config[sn].mb_delim);
-            tmp = cliFormatReplyRaw(r->element[i], sn);
+            tmp = cliFormatReplyRaw(r->element[i], sn, result);
             out = sdscatlen(out,tmp,sdslen(tmp));
             sdsfree(tmp);
         }
@@ -525,35 +533,40 @@ static sds cliFormatReplyRaw(redisReply *r, int sn) {
     return out;
 }
 
-static sds cliFormatReplyCSV(redisReply *r, int sn) {
+static sds cliFormatReplyCSV(redisReply *r, int sn, sds *result) {
     unsigned int i;
 
     sds out = sdsempty();
     switch (r->type) {
     case REDIS_REPLY_ERROR:
+        *result = sdscat(*result,"ERROR,");
         out = sdscat(out,"ERROR,");
         out = sdscatrepr(out,r->str,strlen(r->str));
-		break;
+	break;
     case REDIS_REPLY_STATUS:
+        *result = sdscatrepr(*result,r->str,r->len);
         out = sdscatrepr(out,r->str,r->len);
-		break;
+	break;
     case REDIS_REPLY_INTEGER:
+        *result = sdscatprintf(*result,"%lld",r->integer);
         out = sdscatprintf(out,"%lld",r->integer);
-		break;
+	break;
     case REDIS_REPLY_STRING:
+        *result = sdscatlen(*result,r->str,r->len);
         out = sdscatrepr(out,r->str,r->len);
-		break;
+	break;
     case REDIS_REPLY_NIL:
+        *result = sdscat(*result,"NIL");
         out = sdscat(out,"NIL");
-		break;
+	break;
     case REDIS_REPLY_ARRAY:
         for (i = 0; i < r->elements; i++) {
-			sds tmp = cliFormatReplyCSV(r->element[i], sn);
-			out = sdscatlen(out,tmp,sdslen(tmp));
-			if (i != r->elements-1) out = sdscat(out,",");
-			sdsfree(tmp);
+	    sds tmp = cliFormatReplyCSV(r->element[i], sn, result);
+	    out = sdscatlen(out,tmp,sdslen(tmp));
+	    if (i != r->elements-1) out = sdscat(out,",");
+	    sdsfree(tmp);
         }
-		break;
+	break;
     default:
         fprintf(stderr,"Unknown reply type: %d\n", r->type);
         exit(1);
@@ -622,19 +635,18 @@ static int cliReadReply(int output_raw_strings, int sn, sds *result) {
 
     if (output) {
         if (output_raw_strings) {
-			out = cliFormatReplyRaw(reply, sn);
+	    out = cliFormatReplyRaw(reply, sn, result);
         } else {
             if (config[sn].output == OUTPUT_RAW) {
-                out = cliFormatReplyRaw(reply, sn);
+		out = cliFormatReplyRaw(reply, sn, result);
                 out = sdscat(out,"\n");
             } else if (config[sn].output == OUTPUT_STANDARD) {
-                out = cliFormatReplyTTY(reply,"");
+                out = cliFormatReplyTTY(reply,"", result);
             } else if (config[sn].output == OUTPUT_CSV) {
-                out = cliFormatReplyCSV(reply, sn);
+                out = cliFormatReplyCSV(reply, sn, result);
                 out = sdscat(out,"\n");
             }
         }
-		*result = sdscatsds(*result, out);
         sdsfree(out);
     }
     freeReplyObject(reply);
@@ -2281,13 +2293,14 @@ int getDeadServer(void)
 	return deadServer;
 }
 
-void singleRepl(sds *argv, int argc, int sn, sds *result)
+int singleRepl(sds *argv, int argc, int sn, sds *result)
 {
+	int ret = REDIS_OK;
 	*result = sdsempty();
 	if (argv == NULL)
 	{
 		printf("Invalid argument(s)\n");
-		return;
+		return ret;
 	}
 	else if (argc > 0)
 	{
@@ -2324,22 +2337,15 @@ void singleRepl(sds *argv, int argc, int sn, sds *result)
 				repeat = 1;
 			}
 
-			if (issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, sn, result) != REDIS_OK)
-			{
-				deadServer++;
-			}
+			ret = issueCommandRepeat(argc-skipargs, argv+skipargs, repeat, sn, result);
 
-			if(deadServer > PARITY_SERVER_NUM)
-			{
-				printf("Warning: More than %d servers not connected\n", PARITY_SERVER_NUM);
-			}
-					
 			elapsed = mstime()-start_time;
 			if (elapsed >= 500)
 			{
 				printf("(%.2fs)\n",(double)elapsed/1000);
 			}
 		}
+		return ret;
 	}
 }
 

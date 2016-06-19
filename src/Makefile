@@ -76,11 +76,7 @@ endif
 endif
 endif
 # Include paths to dependencies
-<<<<<<< HEAD
-FINAL_CFLAGS+= -I../deps/hiredis -I../deps/linenoise -I../deps/lua/src
-=======
 FINAL_CFLAGS+= -I../deps/hiredis -I../deps/linenoise -I../deps/lua/src -I../isa-l/include
->>>>>>> d216d12a6798faf9d645ae7d396e8e177fb9c77d
 
 ifeq ($(MALLOC),tcmalloc)
 	FINAL_CFLAGS+= -DUSE_TCMALLOC
@@ -95,11 +91,7 @@ endif
 ifeq ($(MALLOC),jemalloc)
 	DEPENDENCY_TARGETS+= jemalloc
 	FINAL_CFLAGS+= -DUSE_JEMALLOC -I../deps/jemalloc/include
-<<<<<<< HEAD
-	FINAL_LIBS+= ../deps/jemalloc/lib/libjemalloc.a -ldl
-=======
-	FINAL_LIBS+= ../deps/jemalloc/lib/libjemalloc.a -ldl -lisal
->>>>>>> d216d12a6798faf9d645ae7d396e8e177fb9c77d
+	FINAL_LIBS+= ../deps/jemalloc/lib/libjemalloc.a -ldl /usr/lib/libisal.a
 endif
 
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
@@ -131,11 +123,7 @@ REDIS_CHECK_DUMP_OBJ=redis-check-dump.o lzf_c.o lzf_d.o crc64.o
 REDIS_CHECK_AOF_NAME=redis-check-aof
 REDIS_CHECK_AOF_OBJ=redis-check-aof.o
 GATEWAY_NAME=gateway
-<<<<<<< HEAD
-GATEWAY_OBJ=adlist.o ae.o anet.o dict.o gateway.o gateway-front.o gateway-back.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o gateway-networking.o util.o object.o db.o replication.o rdb.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o crc16.o endianconv.o slowlog.o scripting.o bio.o rio.o rand.o memtest.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o
-=======
-GATEWAY_OBJ=adlist.o ae.o anet.o dict.o gateway.o gateway-front.o gateway-back.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o gateway-networking.o util.o object.o db.o replication.o rdb.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o crc16.o endianconv.o slowlog.o scripting.o bio.o rio.o rand.o memtest.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o erasure_code_test2.o
->>>>>>> d216d12a6798faf9d645ae7d396e8e177fb9c77d
+GATEWAY_OBJ=adlist.o ae.o anet.o dict.o gateway.o gateway-front.o gateway-back.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o gateway-networking.o util.o object.o db.o replication.o rdb.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o crc16.o endianconv.o slowlog.o scripting.o bio.o rio.o rand.o memtest.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o erasure_code_test.o
 
 all: $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCHMARK_NAME) $(REDIS_CHECK_DUMP_NAME) $(REDIS_CHECK_AOF_NAME) $(GATEWAY_NAME)
 	@echo ""

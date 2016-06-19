@@ -1,4 +1,4 @@
-B/*
+/*
  * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
@@ -32,6 +32,8 @@ B/*
 
 #include "gateway.h"
 #include "gateway-front.h"
+
+#include "erasure_code_test.h"
 
 /*-----------------------------------------------------------------------------
  * String Commands
@@ -89,7 +91,7 @@ void setGenericCommand(redisClient *c, int flags, robj *key, robj *val, robj *ex
     if (expire) setExpire(c->db,key,mstime()+milliseconds);
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"set",key,c->db->id);
     if (expire) notifyKeyspaceEvent(REDIS_NOTIFY_GENERIC,
-        "expire",key,c->db->id);
+				    "expire",key,c->db->id);
     addReply(c, ok_reply ? ok_reply : shared.ok);
 }
 
@@ -100,99 +102,109 @@ void gateSetCommand(redisClient *c) {
     int unit = UNIT_SECONDS;
     int flags = REDIS_SET_NO_FLAGS;
 
-	/*
-    for (j = 3; j < c->argc; j++) {
-        char *a = c->argv[j]->ptr;
-        robj *next = (j == c->argc-1) ? NULL : c->argv[j+1];
+    /*
+      for (j = 3; j < c->argc; j++) {
+      char *a = c->argv[j]->ptr;
+      robj *next = (j == c->argc-1) ? NULL : c->argv[j+1];
 
-        if ((a[0] == 'n' || a[0] == 'N') &&
-            (a[1] == 'x' || a[1] == 'X') && a[2] == '\0') {
-            flags |= REDIS_SET_NX;
-        } else if ((a[0] == 'x' || a[0] == 'X') &&
-                   (a[1] == 'x' || a[1] == 'X') && a[2] == '\0') {
-            flags |= REDIS_SET_XX;
-        } else if ((a[0] == 'e' || a[0] == 'E') &&
-                   (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' && next) {
-            unit = UNIT_SECONDS;
-            expire = next;
-            j++;
-        } else if ((a[0] == 'p' || a[0] == 'P') &&
-                   (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' && next) {
-            unit = UNIT_MILLISECONDS;
-            expire = next;
-            j++;
-        } else {
-            addReply(c,shared.syntaxerr);
-            return;
-        }
-    }
-	*/
+      if ((a[0] == 'n' || a[0] == 'N') &&
+      (a[1] == 'x' || a[1] == 'X') && a[2] == '\0') {
+      flags |= REDIS_SET_NX;
+      } else if ((a[0] == 'x' || a[0] == 'X') &&
+      (a[1] == 'x' || a[1] == 'X') && a[2] == '\0') {
+      flags |= REDIS_SET_XX;
+      } else if ((a[0] == 'e' || a[0] == 'E') &&
+      (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' && next) {
+      unit = UNIT_SECONDS;
+      expire = next;
+      j++;
+      } else if ((a[0] == 'p' || a[0] == 'P') &&
+      (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' && next) {
+      unit = UNIT_MILLISECONDS;
+      expire = next;
+      j++;
+      } else {
+      addReply(c,shared.syntaxerr);
+      return;
+      }
+      }
+    */
 
-	sds okstr = sdsnew("OK\n");
+    sds okstr = sdsnew("OK");
 
-	sds argv[3];
-	argv[0] = sdsnew("set");
-	argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
-	char *origin = c->argv[2]->ptr;
+    sds argv[3];
+    argv[0] = sdsnew("set");
+    argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+    argv[2] = sdsempty();
+    char *origin = c->argv[2]->ptr;
 
-	int checker = 0;
-	int deadServer = 0;
+    int checker = 0;
+    int deadServer = 0;
 	
-	if (SAVE_METHOD == RFN_METHOD)
-	{
-		argv[2] = sdsnewlen(origin, sdslen(origin));
+    if (SAVE_METHOD == RFN_METHOD)
+    {
+	argv[2] = sdsnewlen(origin, sdslen(origin));
 		
-		sds rfn_result;
+	sds rfn_result;
 		
-		for (int i = 0; i < ALL_SERVER_NUM; i++)
-		{
-			if (singleRepl(argv, 3, i, &rfn_result) != REDIS_OK)
-			{
-				deadServer++;
-			}
-			checker = checker || sdscmp(rfn_result, okstr) == 0;
-			sdsfree(rfn_result);
-		}
-
-		sdsfree(argv[2]);
-	}
-	else
+	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
-		sds ec_result;
-
-		char **encoded;
-
-		for (int i = 0; i < ALL_SERVER_NUM; i++)
-		{
-			argv[2] = sdsnewlen(encoded[i], sdslen(encoded[i]));
-
-			if (singleRepl(argv, 3, i, &ec_result) != REDIS_OK)
-			{
-				deadServer++;
-			}
-			checker = checker || sdscmp(ec_result[i], okstr) == 0;
-			sdsfree(ec_result);
-
-			sdsfree(argv[2]);
-		}
+	    if (singleRepl(argv, 3, i, &rfn_result) != REDIS_OK)
+	    {
+		deadServer++;
+	    }
+	    checker = checker || sdscmp(rfn_result, okstr) == 0;
+	    sdsfree(rfn_result);
 	}
 
-	printf("Dead: %d\n", deadServer);
+	sdsfree(argv[2]);
+    }
+    else
+    {
+	sds ec_result;
+	int len = sdslen(origin);
 
-	sdsfree(okstr);
+	origin[sdslen(origin)] = 0;
+	printf("%s\n", origin);
+	char *encoded[TEST_SOURCES];
 
-	sdsfree(argv[0]);
-	sdsfree(argv[1]);
+	allign(encoded, encode(origin));
 
-	if (checker && deadServer <= PARITY_SERVER_NUM)
+	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
-		addReply(c, shared.ok);
-		return;
+	    argv[2] = sdsnew(encoded[i]);
+	    //if (sdslen(argv[2]) > 2)
+	    //{
+	    //sdsrange(argv[2], 0, -2);
+	    //}
+	    
+	    if (singleRepl(argv, 3, i, &ec_result) != REDIS_OK)
+	    {
+		deadServer++;
+	    }
+	    checker = checker || sdscmp(ec_result, okstr) == 0;
+	    sdsfree(ec_result);
+		    
+	    sdsfree(argv[2]);
 	}
+    }
 
-	addReply(c,shared.syntaxerr);
-	// c->argv[2] = tryObjectEncoding(c->argv[2]);
-	// printf("%d, %d : %s\n", c->argv[2]->type, sdsEncodedObject(c->argv[2]), strEncoding(c->argv[2]->encoding));
+    printf("Dead: %d\n", deadServer);
+
+    sdsfree(okstr);
+
+    sdsfree(argv[0]);
+    sdsfree(argv[1]);
+
+    if (checker && deadServer <= PARITY_SERVER_NUM)
+    {
+	addReply(c, shared.ok);
+	return;
+    }
+
+    addReply(c,shared.err);
+    // c->argv[2] = tryObjectEncoding(c->argv[2]);
+    // printf("%d, %d : %s\n", c->argv[2]->type, sdsEncodedObject(c->argv[2]), strEncoding(c->argv[2]->encoding));
     // setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 }
 
@@ -227,100 +239,137 @@ int getGenericCommand(redisClient *c) {
 }
 
 void gateGetCommand(redisClient *c) {
-	sds argv[2];
-	argv[0] = sdsnew("get");
-	argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+    sds argv[2];
+    argv[0] = sdsnew("get");
+    argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
 
-	sds nilstr = sdsnew("nil");
-	sds emptystr = sdsnew("");
+    sds nilstr = sdsnew("(nil");
+    sds emptystr = sdsnew("");
 
-	int deadServer = 0;
+    int deadServer = 0;
+    int send = 0;
 
-	if (SAVE_METHOD == RFN_METHOD)
+    if (SAVE_METHOD == RFN_METHOD)
+    {
+	sds rfn_result;
+	robj *obj;
+	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
-		sds rfn_result;
-		robj *obj;
-		int send = 0;
-		for (int i = 0; i < ALL_SERVER_NUM; i++)
-		{
-			if (singleRepl(argv, 2, i, &rfn_result) != REDIS_OK)
-			{
-				deadServer++;
-			}
-			sdsrange(rfn_result, 1, -3);
+	    if (singleRepl(argv, 2, i, &rfn_result) != REDIS_OK)
+	    {
+		deadServer++;
+	    }
+	    sdsrange(rfn_result, 1, -3);
 
-			if (sdscmp(rfn_result, nilstr) != 0 && sdscmp(rfn_result, emptystr) != 0)
-			{
-				obj = createObject(REDIS_STRING, result);
-				addReplyBulk(c, obj);
-				freeStringObject(obj);
-				send = 1;
-				break;
-			}
+	    if (sdscmp(rfn_result, nilstr) != 0 && sdscmp(rfn_result, emptystr) != 0)
+	    {
+		obj = createObject(REDIS_STRING, rfn_result);
+		addReplyBulk(c, obj);
+		freeStringObject(obj);
+		send = 1;
+		break;
+	    }
 
-			sdsfree(result);
-		}
+	    sdsfree(rfn_result);
 	}
-	else
+    }
+    else
+    {
+	sds ec_result[ALL_SERVER_NUM];
+
+	unsigned char src_in_err[TEST_SOURCES] = {0,};
+	unsigned char src_err_list[TEST_SOURCES] = {0,};
+
+	int deadDataServer = 0;
+	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
-		sds ec_result[ALL_SERVER_NUM];
-		for (int i = 0; i < ALL_SERVER_NUM; i++)
+	    if (singleRepl(argv, 2, i, ec_result+i) != REDIS_OK)
+	    {
+		src_in_err[i] = 1;
+		src_err_list[deadServer] = i;
+		deadServer++;
+		if (i <= DATA_SERVER_NUM)
 		{
-			if (singleRepl(argv, 2, i, ec_result+i) != REDIS_OK)
-			{
-				deadServer++;
-			}
-			sdsrange(rfn_result, 1, -3);
-
-			if (sdscmp(ec_result[i], nilstr) != 0 && sdscmp(ec_result[i], ))
-			{
-				deadServer++;
-			}
+		    deadDataServer++;
 		}
+		sdsfree(ec_result[i]);
+		ec_result[i] = 0;
+		continue;
+	    }
+
+	    //printf("%s\n", ec_result[i]);
+	    ec_result[i][strlen(ec_result[i])-1] = 0;
+	    //printf("%s\n", ec_result[i]);
+
+	    if (strcmp(ec_result[i], nilstr) == 0 || strcmp(ec_result[i], emptystr) == 0)
+	    {
+		src_in_err[i] = 1;
+		src_err_list[deadServer] = i;
+		deadServer++;
+		if (i <= DATA_SERVER_NUM)
+		{
+		    deadDataServer++;
+		}
+		sdsfree(ec_result[i]);
+		ec_result[i] = 0;
+	    }
 	}
+
+	if (deadServer <= PARITY_SERVER_NUM)
+	{
+	    printf("%d\n", deadServer);
+	    char *decoded = decode((unsigned char **)ec_result, src_in_err, src_err_list, deadServer, deadDataServer);
+	    
+	    robj *obj = createStringObject(decoded, strlen(decoded));
+	    
+	    addReplyBulk(c, obj);
+	    freeStringObject(obj);
+	    send = 1;
+	}
+    }
 	
-	sdsfree(argv[0]);
-	sdsfree(argv[1]);
-	sdsfree(nilstr);
-	sdsfree(emptystr);
+    sdsfree(argv[0]);
+    sdsfree(argv[1]);
+    sdsfree(nilstr);
+    sdsfree(emptystr);
 
-	if (!send)
-	{
+    if (!send)
+    {
         addReply(c, shared.nullbulk);
-	}
+    }
     // getGenericCommand(c);
 }
 
 void gateDelCommand(redisClient *c) {
-	sds argv[2];
-	argv[0] = sdsnew("del");
-	argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+    sds argv[2];
+    argv[0] = sdsnew("del");
+    argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
 
-	sds result;
-	long long v;
-	long long max;
+    sds result;
+    long long v;
+    long long max;
 
-	resetDeadServer();
+    resetDeadServer();
 	
-	for (int i = 0; i < ALL_SERVER_NUM; i++)
+    for (int i = 0; i < ALL_SERVER_NUM; i++)
+    {
+	singleRepl(argv, 2, i, &result);
+	sdsrange(result, -2, -2);
+	v = atoi(result);
+	sdsfree(result);
+
+	if (max < v)
 	{
-		singleRepl(argv, 2, i, &result);
-		sdsrange(result, -2, -2);
-		v = atoi(result);
-		sdsfree(result);
-
-		if (max < v)
-		{
-			max = v;
-		}
+	    max = v;
 	}
+    }
 
-	printf("The Number of Dead Server: %d\n", getDeadServer());
+    printf("The Number of Dead Server: %d\n", getDeadServer());
 	
-	sdsfree(argv[0]);
-	sdsfree(argv[1]);
+    sdsfree(argv[0]);
+    sdsfree(argv[1]);
 
-	addReplyLongLong(c, v); 
+    addReplyLongLong(c, v); 
 }
 
 void getsetCommand(redisClient *c) {
@@ -385,7 +434,7 @@ void setrangeCommand(redisClient *c) {
         memcpy((char*)o->ptr+offset,value,sdslen(value));
         signalModifiedKey(c->db,c->argv[1]);
         notifyKeyspaceEvent(REDIS_NOTIFY_STRING,
-            "setrange",c->argv[1],c->db->id);
+			    "setrange",c->argv[1],c->db->id);
         server.dirty++;
     }
     addReplyLongLong(c,sdslen(o->ptr));

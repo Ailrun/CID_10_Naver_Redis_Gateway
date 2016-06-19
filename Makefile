@@ -1,11 +1,9 @@
-# Top level makefile, the real shit is at src/Makefile
+BDEPSLIBS = hiredis jemalloc linenoise lua
+
+.PHONY : all
 
 default: all
 
-.DEFAULT:
-	cd src && $(MAKE) $@
-
-install:
-	cd src && $(MAKE) $@
-
-.PHONY: install
+all:
+	cd deps && $(MAKE) $(DEPSLIBS)
+	cd src && $(MAKE)

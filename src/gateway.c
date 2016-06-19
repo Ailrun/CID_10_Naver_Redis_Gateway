@@ -54,10 +54,9 @@
 #include <locale.h>
 
 #include "gateway.h"
-<<<<<<< HEAD
-=======
 #include "gateway-front.h"
->>>>>>> d216d12a6798faf9d645ae7d396e8e177fb9c77d
+
+#include "erasure_code_test.h"
 
 /* Our shared "common" objects */
 
@@ -3449,6 +3448,8 @@ int main(int argc, char **argv) {
     dictSetHashFunctionSeed(tv.tv_sec^tv.tv_usec^getpid());
     server.sentinel_mode = checkForSentinelMode(argc,argv);
     initServerConfig();
+
+    init2(DATA_SERVER_NUM, PARITY_SERVER_NUM);
 
     /* We need to init sentinel right now as parsing the configuration file
      * in sentinel mode will have the effect of populating the sentinel
