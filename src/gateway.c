@@ -56,7 +56,8 @@
 #include "gateway.h"
 #include "gateway-front.h"
 
-#include "erasure_code_test.h"
+#include "useisa.h"
+//#include "erasure_code_test.h"
 
 /* Our shared "common" objects */
 
@@ -3449,7 +3450,8 @@ int main(int argc, char **argv) {
     server.sentinel_mode = checkForSentinelMode(argc,argv);
     initServerConfig();
 
-    init2(DATA_SERVER_NUM, PARITY_SERVER_NUM);
+    init_erasure(ALL_SERVER_NUM, DATA_SERVER_NUM);
+    //init2(DATA_SERVER_NUM, PARITY_SERVER_NUM);
 
     /* We need to init sentinel right now as parsing the configuration file
      * in sentinel mode will have the effect of populating the sentinel

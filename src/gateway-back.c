@@ -437,7 +437,7 @@ static sds cliFormatReplyTTY(redisReply *r, char *prefix, sds *result) {
         out = sdscat(out,"\n");
 		break;
     case REDIS_REPLY_INTEGER:
-        *result = sdscatprintf(*result,"(integer) %lld",r->integer);
+        *result = sdscatprintf(*result,"%lld",r->integer);
         out = sdscatprintf(out,"(integer) %lld\n",r->integer);
 		break;
     case REDIS_REPLY_STRING:

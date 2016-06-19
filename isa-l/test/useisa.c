@@ -129,7 +129,7 @@ void encode_erasure(unsigned char *original, size_t original_len, unsigned char 
     
     int save_len = k*((original_len + original_len_digit + k)/k);
     unsigned char *save = (unsigned char *) malloc(save_len * sizeof(unsigned char));
-    memset(save, 0, save_len);
+    memset(save, 2, save_len);
     memcpy(save, original, original_len);
 
     temp_len = original_len;
@@ -139,6 +139,8 @@ void encode_erasure(unsigned char *original, size_t original_len, unsigned char 
 	temp_len /= 10;
     }
 
+    printf("after length = %d\n", save_len);
+
     int frg_len = save_len/k;
 
     for (int i = 0; i < m; i++)
@@ -147,6 +149,8 @@ void encode_erasure(unsigned char *original, size_t original_len, unsigned char 
 	result[i][frg_len] = 0;
     }
 
+    printf("after frg malloc\n");
+
     for (int i = 0; i < k; i++)
     {
 	memcpy(result[i], save+i*frg_len, frg_len);
@@ -154,6 +158,13 @@ void encode_erasure(unsigned char *original, size_t original_len, unsigned char 
 
     ec_encode_data(frg_len, k, rows, gf_tbls[0], result, result+k);
 
+    printf("after encode\n");
+
+    for (int i = 0; i < k; i++)
+    {
+	printf("%s\n", result[i]);
+    }
+    
     free(save);
 }
 
@@ -251,19 +262,25 @@ void decode_erasure(unsigned char **data, size_t frg_len, unsigned char **result
 	{
 	    memcpy(save+frg_len*decode_index[i], recov[i], frg_len);
 	}
-	free(recov[i]);
     }
+    free(recov);
 
     size_t result_len = 0;
     int multiplyer = 1;
-    for (int i = save_len-1; i > 0 && save[i] != 0; i--)
+    for (int i = save_len-1; i > 0 && save[i] != 2; i--)
     {
 	result_len += (save[i] - '0') * multiplyer;
 	multiplyer *= 10;
     }
+    printf("here?\n");
     *result = (unsigned char *) malloc((result_len + 1) * sizeof(unsigned char));
+    printf("now?\n");
 
-    memcpy(*result, save, result_len+1);
+    printf("check len : %d, %d\n", save_len, result_len);
+    printf("check others : %s\n%d, %d\n", save, save_len, result_len);
+
+    memcpy(*result, save, result_len);
+    (*result)[result_len] = 0;
     free(src_in_err);
     free(src_err_lst);
     free(save);
@@ -285,16 +302,18 @@ void deinit(void)
 }
 
 /* MainFunction For Test */
-/*
 int main(void)
 {
+    int mv = 8;
+    int kv = 4;
+
     char buffer[256];
     
     scanf("%s", buffer);
 
-    init_erasure(6, 4);
+    init_erasure(mv, kv);
 
-    unsigned char *result[6];
+    unsigned char *result[mv];
     encode_erasure(buffer, strlen(buffer), result, NULL);
 
     for (int i = 0; i < m; i++)
@@ -308,4 +327,3 @@ int main(void)
 
     printf("%s\n", decoded);
 }
-*/

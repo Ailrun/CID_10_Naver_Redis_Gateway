@@ -33,7 +33,8 @@
 #include "gateway.h"
 #include "gateway-front.h"
 
-#include "erasure_code_test.h"
+#include "useisa.h"
+//#include "erasure_code_test.h"
 
 /*-----------------------------------------------------------------------------
  * String Commands
@@ -162,16 +163,18 @@ void gateSetCommand(redisClient *c) {
     else
     {
 	sds ec_result;
-	int len = sdslen(origin);
+	//int len = sdslen(origin);
 
-	origin[sdslen(origin)] = 0;
-	printf("%s\n", origin);
-	char *encoded[TEST_SOURCES];
-
-	allign(encoded, encode(origin));
+	//origin[sdslen(origin)] = 0;
+	printf("%s, %d\n", origin, sdslen(origin));
+	char *encoded[ALL_SERVER_NUM];
+	encode_erasure(origin, sdslen(origin), encoded, NULL);
+	//char *encoded[TEST_SOURCES];
+	//allign(encoded, encode(origin));
 
 	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
+	    //printf("%c\n", encoded[i][0]);
 	    argv[2] = sdsnew(encoded[i]);
 	    //if (sdslen(argv[2]) > 2)
 	    //{
@@ -243,7 +246,8 @@ void gateGetCommand(redisClient *c) {
     argv[0] = sdsnew("get");
     argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
 
-    sds nilstr = sdsnew("(nil");
+    sds nilstr = sdsnew("(nil)");
+    //sds nilstr = sdsnew("(nil");
     sds emptystr = sdsnew("");
 
     int deadServer = 0;
@@ -277,16 +281,16 @@ void gateGetCommand(redisClient *c) {
     {
 	sds ec_result[ALL_SERVER_NUM];
 
-	unsigned char src_in_err[TEST_SOURCES] = {0,};
-	unsigned char src_err_list[TEST_SOURCES] = {0,};
+	//unsigned char src_in_err[TEST_SOURCES] = {0,};
+	//unsigned char src_err_list[TEST_SOURCES] = {0,};
 
 	int deadDataServer = 0;
 	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
 	    if (singleRepl(argv, 2, i, ec_result+i) != REDIS_OK)
 	    {
-		src_in_err[i] = 1;
-		src_err_list[deadServer] = i;
+		//src_in_err[i] = 1;
+		//src_err_list[deadServer] = i;
 		deadServer++;
 		if (i <= DATA_SERVER_NUM)
 		{
@@ -298,13 +302,13 @@ void gateGetCommand(redisClient *c) {
 	    }
 
 	    //printf("%s\n", ec_result[i]);
-	    ec_result[i][strlen(ec_result[i])-1] = 0;
+	    //ec_result[i][strlen(ec_result[i])-1] = 0;
 	    //printf("%s\n", ec_result[i]);
 
 	    if (strcmp(ec_result[i], nilstr) == 0 || strcmp(ec_result[i], emptystr) == 0)
 	    {
-		src_in_err[i] = 1;
-		src_err_list[deadServer] = i;
+		//src_in_err[i] = 1;
+		//src_err_list[deadServer] = i;
 		deadServer++;
 		if (i <= DATA_SERVER_NUM)
 		{
@@ -318,8 +322,11 @@ void gateGetCommand(redisClient *c) {
 	if (deadServer <= PARITY_SERVER_NUM)
 	{
 	    printf("%d\n", deadServer);
-	    char *decoded = decode((unsigned char **)ec_result, src_in_err, src_err_list, deadServer, deadDataServer);
-	    
+
+	    char *decoded;
+	    decode_erasure((unsigned char **) ec_result, sdslen(ec_result[0]), &decoded);
+	    //char *decoded = decode((unsigned char **)ec_result, src_in_err, src_err_list, deadServer, deadDataServer);
+
 	    robj *obj = createStringObject(decoded, strlen(decoded));
 	    
 	    addReplyBulk(c, obj);
@@ -354,7 +361,7 @@ void gateDelCommand(redisClient *c) {
     for (int i = 0; i < ALL_SERVER_NUM; i++)
     {
 	singleRepl(argv, 2, i, &result);
-	sdsrange(result, -2, -2);
+	printf("%s\n", result);
 	v = atoi(result);
 	sdsfree(result);
 
