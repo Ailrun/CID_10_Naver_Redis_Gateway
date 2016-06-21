@@ -139,7 +139,7 @@ void encode_erasure(unsigned char *original, size_t original_len, unsigned char 
 	temp_len /= 10;
     }
 
-    printf("after length = %d\n", save_len);
+    //printf("after length = %d\n", save_len);
 
     int frg_len = save_len/k;
 
@@ -149,7 +149,7 @@ void encode_erasure(unsigned char *original, size_t original_len, unsigned char 
 	result[i][frg_len] = 0;
     }
 
-    printf("after frg malloc\n");
+    //printf("after frg malloc\n");
 
     for (int i = 0; i < k; i++)
     {
@@ -158,12 +158,13 @@ void encode_erasure(unsigned char *original, size_t original_len, unsigned char 
 
     ec_encode_data(frg_len, k, rows, gf_tbls[0], result, result+k);
 
-    printf("after encode\n");
-
+    //printf("after encode\n");
+    /*
     for (int i = 0; i < k; i++)
     {
-	printf("%s\n", result[i]);
+        printf("%s\n", result[i]);
     }
+    */
     
     free(save);
 }
@@ -178,7 +179,6 @@ void after_encode_erasure(unsigned char **result)
 
 void decode_erasure(unsigned char **data, size_t frg_len, unsigned char **result)
 {
-
     unsigned char *src_err_lst = (unsigned char *) malloc(m*sizeof(unsigned char));
     for (int i = 0, r = 0; i < m; i++, r++)
     {
@@ -248,6 +248,8 @@ void decode_erasure(unsigned char **data, size_t frg_len, unsigned char **result
     ec_encode_data(frg_len, k, nerrs, gf_tbls[1], recov, temp_buffer);
 
 
+
+
     size_t save_len = frg_len * k;
     unsigned char *save = (unsigned char *) malloc(save_len*sizeof(unsigned char));
 
@@ -273,6 +275,8 @@ void decode_erasure(unsigned char **data, size_t frg_len, unsigned char **result
 	multiplyer *= 10;
     }
     *result = (unsigned char *) malloc((result_len + 1) * sizeof(unsigned char));
+
+
 
     memcpy(*result, save, result_len);
     (*result)[result_len] = 0;

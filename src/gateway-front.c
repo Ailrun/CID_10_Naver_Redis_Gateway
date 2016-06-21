@@ -137,6 +137,7 @@ void gateSetCommand(redisClient *c) {
     argv[0] = sdsnew("set");
     argv[1] = sdsnewlen(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
     argv[2] = sdsempty();
+    //printf("argc:%d\n", c->argc);
     char *origin = c->argv[2]->ptr;
 
     int checker = 0;
@@ -166,7 +167,7 @@ void gateSetCommand(redisClient *c) {
 	//int len = sdslen(origin);
 
 	//origin[sdslen(origin)] = 0;
-	printf("%s, %d\n", origin, sdslen(origin));
+	//printf("%s, %d\n", origin, sdslen(origin));
 	char *encoded[ALL_SERVER_NUM];
 	encode_erasure(origin, sdslen(origin), encoded, NULL);
 	//char *encoded[TEST_SOURCES];
@@ -192,7 +193,7 @@ void gateSetCommand(redisClient *c) {
 	}
     }
 
-    printf("Dead: %d\n", deadServer);
+    //printf("Dead: %d\n", deadServer);
 
     sdsfree(okstr);
 
@@ -284,7 +285,7 @@ void gateGetCommand(redisClient *c) {
 	//unsigned char src_in_err[TEST_SOURCES] = {0,};
 	//unsigned char src_err_list[TEST_SOURCES] = {0,};
 
-	int deadDataServer = 0;
+	int nilServer = 0;
 	for (int i = 0; i < ALL_SERVER_NUM; i++)
 	{
 	    if (singleRepl(argv, 2, i, ec_result+i) != REDIS_OK)
@@ -292,10 +293,6 @@ void gateGetCommand(redisClient *c) {
 		//src_in_err[i] = 1;
 		//src_err_list[deadServer] = i;
 		deadServer++;
-		if (i <= DATA_SERVER_NUM)
-		{
-		    deadDataServer++;
-		}
 		sdsfree(ec_result[i]);
 		ec_result[i] = 0;
 		continue;
@@ -309,22 +306,29 @@ void gateGetCommand(redisClient *c) {
 	    {
 		//src_in_err[i] = 1;
 		//src_err_list[deadServer] = i;
-		deadServer++;
-		if (i <= DATA_SERVER_NUM)
-		{
-		    deadDataServer++;
-		}
+		nilServer++;
 		sdsfree(ec_result[i]);
 		ec_result[i] = 0;
 	    }
 	}
 
-	if (deadServer <= PARITY_SERVER_NUM)
+	printf("hey\n");
+
+	if (deadServer + nilServer <= PARITY_SERVER_NUM)
 	{
-	    printf("%d\n", deadServer);
+	    printf("Dead : %d, Nil : %d\n", deadServer, nilServer);
 
 	    char *decoded;
-	    decode_erasure((unsigned char **) ec_result, sdslen(ec_result[0]), &decoded);
+	    int length = 0;
+	    for (int i = 0; i < ALL_SERVER_NUM; i++)
+	    {
+		if (ec_result[i] != 0)
+		{
+		    length = sdslen(ec_result[i]);
+		    break;
+		}
+	    }
+	    decode_erasure((unsigned char **) ec_result, length, &decoded);
 	    //char *decoded = decode((unsigned char **)ec_result, src_in_err, src_err_list, deadServer, deadDataServer);
 
 	    robj *obj = createStringObject(decoded, strlen(decoded));
@@ -334,15 +338,19 @@ void gateGetCommand(redisClient *c) {
 	    send = 1;
 	}
     }
-	
+    
     sdsfree(argv[0]);
     sdsfree(argv[1]);
     sdsfree(nilstr);
     sdsfree(emptystr);
 
-    if (!send)
+    if (!send && deadServer <= PARITY_SERVER_NUM)
     {
         addReply(c, shared.nullbulk);
+    }
+    else if (!send)
+    {
+	addReply(c, shared.err);
     }
     // getGenericCommand(c);
 }
